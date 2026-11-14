@@ -1,0 +1,19 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build Filewise",
+      "type": "shell",
+      "command": "./scripts/build.sh",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": "$swiftc"
+    },
+    {
+      "label": "Run Filewise",
+      "type": "shell",
+      "command": "open .build/Filewise.app",
+      "dependsOn": "Build Filewise",
+      "problemMatcher": "$swiftc"
+    }
+  ]
+}
