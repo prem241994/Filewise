@@ -11,7 +11,7 @@ struct FileItem: Identifiable {
     var id: String { url.path }
     var name: String { url.lastPathComponent }
     var kind: String { url.pathExtension.lowercased() }
-    var displaySize: String { kind == "app" ? "Not calculated" : ByteCountFormatter.string(fromByteCount: size, countStyle: .file) }
+    var displaySize: String { kind == "app" && size == 0 ? "Unavailable" : ByteCountFormatter.string(fromByteCount: size, countStyle: .file) }
 
     var libraryCategory: String? {
         switch kind {

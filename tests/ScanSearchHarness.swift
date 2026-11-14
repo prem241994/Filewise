@@ -49,6 +49,9 @@ struct ScanSearchHarness {
         let appContents = app.appendingPathComponent("Contents", isDirectory: true)
         try FileManager.default.createDirectory(at: appContents, withIntermediateDirectories: true)
         try Data("internal".utf8).write(to: appContents.appendingPathComponent("internal.txt"))
+        let external = otherRoot.appendingPathComponent("external.txt")
+        try Data("outside bundle".utf8).write(to: external)
+        try FileManager.default.createSymbolicLink(at: appContents.appendingPathComponent("link"), withDestinationURL: external)
         for index in 0..<3_000 {
             let name = index == 100 ? "specialtoken-report.txt" : String(format: "fixture-%04d.bin", index)
             let url = root.appendingPathComponent(name)
@@ -95,8 +98,14 @@ struct ScanSearchHarness {
                     "full large-folder scan timed out or missed files")
         try require(FileIndex.load(root: root)?.count == count, "large-folder index count was wrong")
         try require(library.files.filter { $0.libraryCategory == "Apps" }.map(\.name) == [app.lastPathComponent], "app bundle was not indexed as one app")
+        try require(library.files.first { $0.name == app.lastPathComponent }?.size == 8, "app bundle size did not include its contents")
         try require(!library.files.contains { $0.name == "internal.txt" }, "app contents were indexed separately")
         try require(FileIndex.load(root: root)?.contains { $0.name == app.lastPathComponent && $0.libraryCategory == "Apps" } == true, "app did not persist in index")
+        try Data("updated contents".utf8).write(to: appContents.appendingPathComponent("internal.txt"))
+        library.scan(root)
+        try require(waitUntil { !library.scanning }, "bundle refresh timed out")
+        try require(library.files.first { $0.name == app.lastPathComponent }?.size == 16,
+                    "bundle refresh did not update size or followed a symbolic link")
         library.category = "Apps"
         try require(waitUntil { library.visible.contains { $0.name == app.lastPathComponent } }, "Apps category did not show bundle")
         library.category = "Home"

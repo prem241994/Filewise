@@ -594,7 +594,7 @@ final class Library: ObservableObject {
                     && values.isDirectory == true && values.isSymbolicLink != true
                 guard values.isRegularFile == true || isAppBundle else { continue }
                 if isAppBundle { enumerator.skipDescendants() }
-                let size = isAppBundle ? 0 : Int64(values.fileSize ?? 0)
+                let size = isAppBundle ? Self.bundleSize(file, token: token) : Int64(values.fileSize ?? 0)
                 let modified = values.contentModificationDate ?? .distantPast
                 let changed = values.attributeModificationDate
                 let previous = cachedByPath[file.path]
@@ -630,7 +630,7 @@ final class Library: ObservableObject {
                 }
                 return
             }
-            let groups = Dictionary(grouping: found.indices.filter { found[$0].size > 0 },
+            let groups = Dictionary(grouping: found.indices.filter { found[$0].size > 0 && found[$0].kind != "app" },
                                     by: { found[$0].size })
             for group in groups.values where group.count > 1 {
                 guard !token.isCancelled else { return }
@@ -687,6 +687,27 @@ final class Library: ObservableObject {
         }
         rescanWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: work)
+    }
+
+    // Return zero when a bundle cannot be fully read, so a partial size is
+    // never presented as an accurate cleanup estimate.
+    private static func bundleSize(_ url: URL, token: ScanToken) -> Int64 {
+        let keys: Set<URLResourceKey> = [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]
+        var failed = false
+        guard let entries = FileManager.default.enumerator(at: url, includingPropertiesForKeys: Array(keys), options: [], errorHandler: { _, _ in
+            failed = true
+            return true
+        }) else { return 0 }
+        var total: Int64 = 0
+        while !token.isCancelled, let entry = entries.nextObject() as? URL {
+            guard let values = try? entry.resourceValues(forKeys: keys) else { failed = true; continue }
+            guard values.isRegularFile == true, values.isSymbolicLink != true else { continue }
+            guard let fileSize = values.fileSize else { failed = true; continue }
+            let (sum, overflow) = total.addingReportingOverflow(Int64(fileSize))
+            if overflow { return 0 }
+            total = sum
+        }
+        return failed || token.isCancelled ? 0 : total
     }
 
     private static func digest(_ url: URL, token: ScanToken) -> Data? {

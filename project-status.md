@@ -83,11 +83,13 @@ Phase 2 — Local scanning, search, and dashboard
 - The installed Swift Package Manager crashes before compilation because its libraries are mismatched. `scripts/build.sh` compiles the app directly with the installed Swift compiler
 - Each background refresh still enumerates the full selected folder; unchanged duplicate hashes are reused when change metadata matches
 - File-change monitoring only runs while the app is open. A background refresh on launch catches changes made while it was closed
-- The menu bar provides window access; menu bar search and a global shortcut are not yet implemented
-- App bundle sizes are not calculated; they are excluded from size-based cleanup suggestions
+- The menu bar provides Open Filewise and Search Files actions; a configurable global shortcut is not yet implemented
+- App bundle sizes sum regular files within the bundle; unreadable bundles show an unavailable size and are excluded from size-based suggestions
 - Cleanup cards show review candidates and their total size, not guaranteed recoverable space
 - A full spoken VoiceOver pass and visual focus-ring review still remain before release
 - The local ZIP package is ad-hoc signed; Developer ID signing and notarization remain necessary for distribution
+- The build and test scripts use the active SDK by default; this Mac currently needs `FILEWISE_SDK_PATH` set to its compatible macOS 26 SDK because its active SDK and Swift compiler are mismatched
+- A GitHub Actions workflow is present locally for building and running the isolated index, search, and Trash safety checks; its first hosted run is pending a push
 
 The 10,000-file metadata benchmark on 14 November 2026 measured 0.92 s for the initial scan, 0.83 s for an unchanged refresh, and 154.0 MiB peak process RSS. This fixture does not measure duplicate hashing.
 
@@ -100,7 +102,7 @@ Harden indexing on large or changing folders. Search date, type, and size phrase
 - Review the current macOS 14 minimum target before distribution
 - Repair or replace the mismatched Swift Package Manager installation when convenient
 - Add shared design tokens for color, spacing, corner radius, and typography as the UI expands
-- Add migration and recovery checks for corrupted or older index databases
+- Extend recovery options for unreadable index databases
 - Complete a spoken VoiceOver pass on results, sidebar, cleanup controls, and dialogs
 - Profile large-folder rescans and reduce repeated metadata work
 

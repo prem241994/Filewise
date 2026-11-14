@@ -55,7 +55,7 @@ struct DetailInspectorView: View {
 
             // Metadata rows
             VStack(alignment: .leading, spacing: 13) {
-                metaRow(title: "Size", value: item.kind == "app" ? item.displaySize : item.displaySize + " (\(item.size.formatted()) bytes)")
+                metaRow(title: "Size", value: item.kind == "app" && item.size == 0 ? item.displaySize : item.displaySize + " (\(item.size.formatted()) bytes)")
                 metaRow(title: "Modified", value: item.modified.formatted(date: .abbreviated, time: .shortened))
                 if let changed = item.changed {
                     metaRow(title: "Attributes Changed", value: changed.formatted(date: .abbreviated, time: .shortened))
