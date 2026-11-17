@@ -76,6 +76,13 @@ Phase 2 — Local scanning, search, and dashboard
 - Journal Trash moves individually before and after moving; stop on write failure, attempt immediate rollback, and recover the latest recorded batch on reopening a folder
 - Add read-only export of accessible Undo records and isolated checks for write failures, partial cancellation, restart, and rollback
 
+- Modernized the window: native split view sidebar with counts, toolbar search, a resizable inspector, and system light/dark appearance support
+- Replaced the 300-row custom list with a sortable native table (name, cleanup notes, size, modified) with multi-select, Return to open, Delete to trash, and context menus
+- Added cleanup explanations: reason tags in results, a "Why it's suggested" inspector section, and a list of identical copies for duplicates
+- Showed locations relative to the selected folder instead of full system paths, and corrected singular/plural counts
+- Trash confirmations now name the files being moved; added File, Edit, and View menu commands
+- Added shared design tokens (`Views/Theme.swift`) and a light/dark UI snapshot script
+
 ## Current limitations
 
 - If the database itself is unreadable, automated salvage is not yet implemented; the original database is left intact for manual recovery
@@ -86,7 +93,8 @@ Phase 2 — Local scanning, search, and dashboard
 - The menu bar provides Open Filewise and Search Files actions; a configurable global shortcut is not yet implemented
 - App bundle sizes sum regular files within the bundle; unreadable bundles show an unavailable size and are excluded from size-based suggestions
 - Cleanup cards show review candidates and their total size, not guaranteed recoverable space
-- A full spoken VoiceOver pass and visual focus-ring review still remain before release
+- A full spoken VoiceOver pass and visual focus-ring review still remain before release; keyboard behaviour of the new table (Space for Quick Look, Delete, Return) should be checked by hand
+- Forgotten downloads are judged by modification date; last-opened date would be more accurate
 - The local ZIP package is ad-hoc signed; Developer ID signing and notarization remain necessary for distribution
 - The build and test scripts use the active SDK by default; this Mac currently needs `FILEWISE_SDK_PATH` set to its compatible macOS 26 SDK because its active SDK and Swift compiler are mismatched
 - A GitHub Actions workflow is present locally for building and running the isolated index, search, and Trash safety checks; its first hosted run is pending a push
@@ -101,7 +109,6 @@ Harden indexing on large or changing folders. Search date, type, and size phrase
 
 - Review the current macOS 14 minimum target before distribution
 - Repair or replace the mismatched Swift Package Manager installation when convenient
-- Add shared design tokens for color, spacing, corner radius, and typography as the UI expands
 - Extend recovery options for unreadable index databases
 - Complete a spoken VoiceOver pass on results, sidebar, cleanup controls, and dialogs
 - Profile large-folder rescans and reduce repeated metadata work

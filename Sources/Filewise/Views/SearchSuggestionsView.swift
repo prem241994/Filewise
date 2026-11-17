@@ -61,7 +61,7 @@ struct SearchSuggestionsView: View {
                             }
                             .padding(.horizontal, 10)
                             .padding(.vertical, 8)
-                            .background(Color.black.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+                            .background(Theme.subtleFill, in: RoundedRectangle(cornerRadius: 8))
                         }
                         .buttonStyle(.plain)
                     }
@@ -131,6 +131,5 @@ struct SearchSuggestionsView: View {
         }
         .padding(16)
         .frame(width: 380)
-        .background(Color(white: 0.99))
     }
 }

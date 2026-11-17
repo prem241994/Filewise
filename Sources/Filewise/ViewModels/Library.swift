@@ -13,7 +13,12 @@ struct LibrarySummary {
 }
 
 final class Library: ObservableObject {
-    @Published var folder: URL?
+    @Published var folder: URL? {
+        didSet { folderPrefixes = Self.pathPrefixes(for: folder) }
+    }
+    /// The selected folder's path, plus its canonical form when they differ
+    /// (for example /var and /private/var), each ending in "/".
+    private var folderPrefixes: [String] = []
     @Published var customFolder: URL?
     @Published var files: [FileItem] = []
     @Published var scanning = false
@@ -42,7 +47,16 @@ final class Library: ObservableObject {
     @Published private(set) var summaries: [String: LibrarySummary] = [:]
     @Published private(set) var downloadSources: [String: LibrarySummary] = [:]
     @Published var selectedIDs = Set<String>()
-    @Published var inspectedItem: FileItem?
+    @Published var sortOrder = Library.defaultSortOrder {
+        didSet {
+            if sortOrder != oldValue {
+                updateVisible()
+            }
+        }
+    }
+    static let defaultSortOrder = [KeyPathComparator(\FileItem.modified, order: .reverse)]
+    /// Lookup for selection and inspector; rebuilt whenever `files` changes.
+    private(set) var filesByID: [String: FileItem] = [:]
     @Published var previewURL: URL?
     @Published var bannerMessage: String?
     @Published var recentSearches: [String] = []
@@ -127,7 +141,36 @@ final class Library: ObservableObject {
     }
 
     var selectedFiles: [FileItem] {
-        files.filter { selectedIDs.contains($0.id) }
+        selectedIDs.compactMap { filesByID[$0] }.sorted { $0.modified > $1.modified }
+    }
+
+    /// Other files with identical contents.
+    func otherCopies(of item: FileItem) -> [FileItem] {
+        guard item.duplicate, let hash = item.hash else { return [] }
+        return files.filter { $0.hash == hash && $0.id != item.id }
+    }
+
+    /// The containing folder relative to the selected folder, such as
+    /// "Desktop › Downloads", falling back to the full path.
+    func displayLocation(for item: FileItem) -> String {
+        let parent = item.url.deletingLastPathComponent().path
+        guard let folder else { return parent }
+        let name = folder.lastPathComponent
+        if folderPrefixes.contains(parent + "/") { return name }
+        guard let prefix = folderPrefixes.first(where: { parent.hasPrefix($0) }) else { return parent }
+        let relative = parent.dropFirst(prefix.count).split(separator: "/").joined(separator: " › ")
+        return name + " › " + relative
+    }
+
+    private static func pathPrefixes(for url: URL?) -> [String] {
+        guard let url else { return [] }
+        let canonical: String? = url.path.withCString { path in
+            guard let resolved = realpath(path, nil) else { return nil }
+            defer { free(resolved) }
+            return String(cString: resolved)
+        }
+        return Array(Set([url.standardizedFileURL.path, canonical ?? url.path]))
+            .map { $0 == "/" ? "/" : $0 + "/" }
     }
 
     var selectedBytes: Int64 {
@@ -249,9 +292,6 @@ final class Library: ObservableObject {
             DispatchQueue.main.async {
                 self.trashCancelToken = nil
                 self.selectedIDs.subtract(trashedPaths)
-                if let inspected = self.inspectedItem, trashedPaths.contains(inspected.url.path) {
-                    self.inspectedItem = nil
-                }
                 if let preview = self.previewURL, trashedPaths.contains(preview.path) {
                     self.previewURL = nil
                 }
@@ -421,14 +461,18 @@ final class Library: ObservableObject {
         }
         summaries = totals
         downloadSources = sourcesTotals
+        filesByID = Dictionary(items.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         if !selectedIDs.isEmpty {
-            selectedIDs.formIntersection(items.map(\.id))
+            selectedIDs.formIntersection(filesByID.keys)
         }
         files = items
         updateVisible(filesOverride: items)
     }
 
     init() {
+        #if FILEWISE_SNAPSHOT
+        SnapshotHook.library = self
+        #endif
         loadRecentSearches()
         updateVisible()
         guard ProcessInfo.processInfo.environment["FILEWISE_TEST_DATABASE_DIRECTORY"] == nil else { return }
@@ -530,7 +574,6 @@ final class Library: ObservableObject {
             lastTrashBatchId = nil
             canUndoTrash = false
             selectedIDs.removeAll()
-            inspectedItem = nil
             previewURL = nil
             watcher = nil
             rescanWorkItem?.cancel()
@@ -761,6 +804,7 @@ final class Library: ObservableObject {
         let currentCategory = category
         let currentFiles = filesOverride ?? files
         let currentFolder = folder
+        let currentSortOrder = sortOrder
 
         let isImmediate = currentQuery.isEmpty
         let delay: Double = isImmediate ? 0.0 : 0.06 // 60ms debounce for typing
@@ -770,7 +814,8 @@ final class Library: ObservableObject {
                 files: currentFiles,
                 query: currentQuery,
                 category: currentCategory,
-                folder: currentFolder
+                folder: currentFolder,
+                sortOrder: currentSortOrder
             )
             DispatchQueue.main.async {
                 guard let self = self, self.visibleGeneration == generation else { return }
@@ -789,7 +834,8 @@ final class Library: ObservableObject {
         files: [FileItem],
         query: String,
         category: String,
-        folder: URL?
+        folder: URL?,
+        sortOrder: [KeyPathComparator<FileItem>]
     ) -> [FileItem] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let words = trimmed.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
@@ -818,7 +864,7 @@ final class Library: ObservableObject {
         let previousWeek = calendar.dateInterval(of: .weekOfYear, for: calendar.date(byAdding: .weekOfYear, value: -1, to: Date()) ?? Date())
         let recentCutoff = calendar.date(byAdding: .day, value: -7, to: Date()) ?? Date()
 
-        return files.filter { item in
+        var result = files.filter { item in
             let categoryMatch: Bool
             switch category {
             case "Recents": categoryMatch = item.modified >= recentCutoff
@@ -851,6 +897,11 @@ final class Library: ObservableObject {
                 && (terms.isEmpty || (ftsMatchedPaths.map { $0.contains(item.url.path) }
                     ?? matchesWordPrefixes(item, terms: foldedTerms)))
         }
+        // `files` is already newest first, so only other orders need sorting.
+        if sortOrder != defaultSortOrder {
+            result.sort(using: sortOrder)
+        }
+        return result
     }
 
     /// In-memory equivalent of the FTS5 query, used while the search index

@@ -21,7 +21,7 @@ If the active SDK and Swift compiler are incompatible, select a compatible insta
 
 ## Use
 
-Choose a folder, then browse the library cards or search by name. You can try `pdf from last week`, `screenshots in Downloads`, or `recent`. Double-click a result to open it, or right-click to show it in Finder. Filewise remembers the selected folder and scans it again when the app opens. A running scan shows its file count and can be cancelled.
+Choose a folder, then browse the library cards or search by name. The window follows the system light or dark appearance. Results appear in a sortable table (click a column header); select one file to see its details, why it is suggested for cleanup, and any identical copies in the inspector, or select several to review them together. Use **File → Choose Folder…** (⌘O), **View → Refresh Library** (⌘R), and **Edit → Restore Last Trashed Files**. You can try `pdf from last week`, `screenshots in Downloads`, or `recent`. Double-click a result to open it, or right-click to show it in Finder. Filewise remembers the selected folder and scans it again when the app opens. A running scan shows its file count and can be cancelled.
 
 Application bundles within the selected folder appear as single items in Apps. Their size is the sum of readable regular files inside the bundle; if the contents cannot be fully read, the size is shown as unavailable.
 
@@ -32,6 +32,10 @@ You can also drop a folder onto the Filewise window to select and scan it.
 The app reads file metadata and hashes possible duplicates within the selected folder. It watches the folder for changes and refreshes the index when files are added or removed. Each refresh enumerates the selected folder, reuses hashes for unchanged files, and updates only changed index rows. Cleanup cards are review views; the app does not upload or permanently delete files.
 
 When you choose **Move to Trash**, Filewise records each move as it happens and stops if it cannot save an Undo record. Undo for the latest recorded batch returns after reopening the selected folder, including after cancellation. If a move is interrupted before its Trash location is saved, check macOS Trash manually. The size shown in progress is the size moved to Trash; macOS does not reclaim that disk space until Trash is emptied.
+
+## Check the UI
+
+Run `./scripts/snapshot-ui.sh [output-dir]` to capture the main screens in light and dark mode against a disposable sample folder (default output: `.build/snapshots`). It builds a separate copy of the app with a development-only capture hook from `tools/SnapshotHook.swift`; the shipping build never includes it. It uses an isolated index and its own preferences, so your library is untouched.
 
 ## Check the cleanup flow
 

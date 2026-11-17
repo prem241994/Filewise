@@ -52,6 +52,47 @@ struct FileItem: Identifiable {
     var isForgottenDownload: Bool {
         kind != "app" && isDownload && modified < (Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date())
     }
+
+    /// Why this file is a cleanup candidate, in display order.
+    var cleanupReasons: [CleanupReason] {
+        var reasons: [CleanupReason] = []
+        if duplicate { reasons.append(.duplicate) }
+        if isLarge { reasons.append(.large) }
+        if isOldScreenshot { reasons.append(.oldScreenshot) }
+        if isForgottenDownload { reasons.append(.forgottenDownload) }
+        return reasons
+    }
+}
+
+enum CleanupReason: CaseIterable {
+    case duplicate, large, oldScreenshot, forgottenDownload
+
+    var label: String {
+        switch self {
+        case .duplicate: "Duplicate"
+        case .large: "Large"
+        case .oldScreenshot: "Old screenshot"
+        case .forgottenDownload: "Old download"
+        }
+    }
+
+    var explanation: String {
+        switch self {
+        case .duplicate: "Another file in this folder has identical contents."
+        case .large: "Larger than 100 MB."
+        case .oldScreenshot: "A screenshot last modified more than 30 days ago."
+        case .forgottenDownload: "In Downloads and not modified for more than 30 days."
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .duplicate: "square.on.square"
+        case .large: "externaldrive"
+        case .oldScreenshot: "camera.viewfinder"
+        case .forgottenDownload: "arrow.down.circle"
+        }
+    }
 }
 
 struct TrashedRecord: Identifiable {

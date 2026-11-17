@@ -157,6 +157,19 @@ struct ScanSearchHarness {
         try require(waitUntil { library.visible.isEmpty }, "search matched the middle of a word")
 
         library.query = ""
+        library.sortOrder = [KeyPathComparator(\FileItem.size, order: .reverse)]
+        try require(waitUntil { library.visible.first?.name == "holiday.mov" }, "size sort did not put the largest file first")
+        library.sortOrder = Library.defaultSortOrder
+        try require(waitUntil { library.visible.first?.modified == library.files.first?.modified },
+                    "default sort did not restore newest-first order")
+        let weekly = try requireItem(library.files.first { $0.name == "weekly-report.pdf" })
+        try require(library.displayLocation(for: weekly) == root.lastPathComponent,
+                    "a file at the folder root did not show the folder name as its location")
+        try require(Set(library.otherCopies(of: weekly).map(\.name)) == ["current-report.pdf", "short-clip.mp4"],
+                    "identical copies were not listed")
+        try require(weekly.cleanupReasons == [.duplicate], "duplicate reason missing")
+        try require(library.files.first { $0.name == "holiday.mov" }?.cleanupReasons == [.large], "large reason missing")
+
         library.category = "Documents"
         try require(waitUntil { !library.visible.isEmpty }, "Documents category was empty")
         library.toggleSelection(for: library.visible[0])
@@ -227,6 +240,11 @@ struct ScanSearchHarness {
         try Data("after reconnect".utf8).write(to: recoveryRoot.appendingPathComponent("watched.txt"))
         try require(waitUntil { library.files.contains { $0.name == "watched.txt" } },
                     "file watcher did not detect changes after reconnecting the folder")
+    }
+
+    private static func requireItem(_ item: FileItem?) throws -> FileItem {
+        guard let item else { throw ScanTestFailure.assertion("expected file missing") }
+        return item
     }
 
     private static func requireDate(_ date: Date?) throws -> Date {

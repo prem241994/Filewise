@@ -39,7 +39,7 @@ struct TrashProgressDialog: View {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.black.opacity(0.08))
+                        .fill(Theme.hairline)
                         .frame(height: 8)
 
                     RoundedRectangle(cornerRadius: 4)
@@ -113,7 +113,7 @@ struct TrashProgressDialog: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.black.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+            .background(Theme.subtleFill, in: RoundedRectangle(cornerRadius: 10))
 
             // Action Buttons
             HStack {
@@ -137,6 +137,5 @@ struct TrashProgressDialog: View {
         }
         .padding(26)
         .frame(width: 460)
-        .background(Color(white: 0.99))
     }
 }
