@@ -80,14 +80,22 @@ enum FileIndex {
             """
         guard sqlite3_exec(database, schema, nil, nil, nil) == SQLITE_OK else { return false }
         for (name, type) in [("changed", "REAL"), ("hash", "BLOB"), ("download_source", "TEXT")] {
-            if !hasColumn(name, in: database) {
+            if !hasColumn(name, in: "files", database: database) {
                 guard sqlite3_exec(database, "ALTER TABLE files ADD COLUMN \(name) \(type)", nil, nil, nil) == SQLITE_OK else { return false }
             }
         }
+        // The search index is rebuildable. Older layouts without the download
+        // source column are dropped and repopulated by the next scan.
+        if hasTable("files_fts", in: database) && !hasColumn("source", in: "files_fts", database: database) {
+            guard sqlite3_exec(database, "DROP TABLE files_fts", nil, nil, nil) == SQLITE_OK else { return false }
+        }
         guard sqlite3_exec(database, """
             CREATE VIRTUAL TABLE IF NOT EXISTS files_fts USING fts5(
-                name, kind, dirpath, filepath UNINDEXED
+                name, kind, dirpath, source, filepath UNINDEXED
             )
+            """, nil, nil, nil) == SQLITE_OK,
+              sqlite3_exec(database, """
+            CREATE TABLE IF NOT EXISTS search_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)
             """, nil, nil, nil) == SQLITE_OK,
               sqlite3_exec(database, """
             CREATE TABLE IF NOT EXISTS trash_manifest (
@@ -101,9 +109,18 @@ enum FileIndex {
         return true
     }
 
-    private static func hasColumn(_ column: String, in database: OpaquePointer?) -> Bool {
+    private static func hasTable(_ table: String, in database: OpaquePointer?) -> Bool {
         var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(database, "PRAGMA table_info(files)", -1,
+        guard sqlite3_prepare_v2(database, "SELECT 1 FROM sqlite_master WHERE name = ?", -1,
+                                 &statement, nil) == SQLITE_OK else { return false }
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_text(statement, 1, table, -1, transient)
+        return sqlite3_step(statement) == SQLITE_ROW
+    }
+
+    private static func hasColumn(_ column: String, in table: String, database: OpaquePointer?) -> Bool {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, "PRAGMA table_info(\(table))", -1,
                                  &statement, nil) == SQLITE_OK else { return false }
         defer { sqlite3_finalize(statement) }
         while sqlite3_step(statement) == SQLITE_ROW {
@@ -124,6 +141,7 @@ enum FileIndex {
         defer { if !committed { sqlite3_exec(database, "ROLLBACK", nil, nil, nil) } }
         guard sqlite3_exec(database, "DELETE FROM files", nil, nil, nil) == SQLITE_OK,
               sqlite3_exec(database, "DELETE FROM files_fts", nil, nil, nil) == SQLITE_OK,
+              sqlite3_exec(database, "DELETE FROM search_meta WHERE key = 'fts_root'", nil, nil, nil) == SQLITE_OK,
               sqlite3_exec(database, "COMMIT", nil, nil, nil) == SQLITE_OK else { return false }
         committed = true
         return true
@@ -307,7 +325,7 @@ enum FileIndex {
         defer { sqlite3_finalize(insertStmt) }
 
         var ftsStmt: OpaquePointer?
-        let ftsSql = "INSERT INTO files_fts (name, kind, dirpath, filepath) VALUES (?, ?, ?, ?)"
+        let ftsSql = "INSERT INTO files_fts (name, kind, dirpath, source, filepath) VALUES (?, ?, ?, ?, ?)"
         guard sqlite3_prepare_v2(database, ftsSql, -1, &ftsStmt, nil) == SQLITE_OK else { return }
         defer { sqlite3_finalize(ftsStmt) }
 
@@ -344,7 +362,8 @@ enum FileIndex {
             sqlite3_bind_text(ftsStmt, 1, item.name, -1, transient)
             sqlite3_bind_text(ftsStmt, 2, item.kind, -1, transient)
             sqlite3_bind_text(ftsStmt, 3, item.url.deletingLastPathComponent().path, -1, transient)
-            sqlite3_bind_text(ftsStmt, 4, item.url.path, -1, transient)
+            sqlite3_bind_text(ftsStmt, 4, item.downloadSource ?? "", -1, transient)
+            sqlite3_bind_text(ftsStmt, 5, item.url.path, -1, transient)
             _ = sqlite3_step(ftsStmt)
         }
 
@@ -520,9 +539,9 @@ enum FileIndex {
 
     // MARK: - Full-Text Search
 
-    /// Rebuilds the FTS5 search index from the given items.
-    /// Called after a successful save to keep the search index in sync.
-    static func rebuildSearchIndex(_ items: [FileItem], token: ScanToken) {
+    /// Rebuilds the FTS5 search index from the given items and records which
+    /// folder it covers. Called after a successful save to keep search in sync.
+    static func rebuildSearchIndex(_ items: [FileItem], root: URL, token: ScanToken) {
         guard let database = openDatabase() else { return }
         defer { sqlite3_close(database) }
         guard sqlite3_exec(database, "BEGIN IMMEDIATE TRANSACTION",
@@ -534,7 +553,7 @@ enum FileIndex {
                            nil, nil, nil) == SQLITE_OK else { return }
 
         var stmt: OpaquePointer?
-        let sql = "INSERT INTO files_fts (name, kind, dirpath, filepath) VALUES (?, ?, ?, ?)"
+        let sql = "INSERT INTO files_fts (name, kind, dirpath, source, filepath) VALUES (?, ?, ?, ?, ?)"
         guard sqlite3_prepare_v2(database, sql, -1, &stmt, nil) == SQLITE_OK else { return }
         defer { sqlite3_finalize(stmt) }
 
@@ -545,9 +564,17 @@ enum FileIndex {
             sqlite3_bind_text(stmt, 1, item.name, -1, transient)
             sqlite3_bind_text(stmt, 2, item.kind, -1, transient)
             sqlite3_bind_text(stmt, 3, item.url.deletingLastPathComponent().path, -1, transient)
-            sqlite3_bind_text(stmt, 4, item.url.path, -1, transient)
+            sqlite3_bind_text(stmt, 4, item.downloadSource ?? "", -1, transient)
+            sqlite3_bind_text(stmt, 5, item.url.path, -1, transient)
             guard sqlite3_step(stmt) == SQLITE_DONE else { return }
         }
+
+        var metaStmt: OpaquePointer?
+        guard sqlite3_prepare_v2(database, "INSERT OR REPLACE INTO search_meta (key, value) VALUES ('fts_root', ?)",
+                                 -1, &metaStmt, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(metaStmt) }
+        sqlite3_bind_text(metaStmt, 1, root.standardizedFileURL.path, -1, transient)
+        guard sqlite3_step(metaStmt) == SQLITE_DONE else { return }
 
         guard !token.isCancelled,
               sqlite3_exec(database, "COMMIT", nil, nil, nil) == SQLITE_OK else { return }
@@ -555,12 +582,20 @@ enum FileIndex {
     }
 
     /// Queries the FTS5 index for files matching the given search terms.
-    /// Returns a set of matching file paths, or nil if FTS data is unavailable
-    /// (callers should fall back to in-memory filtering).
+    /// Returns the matching file paths (possibly empty), or nil when the index
+    /// does not cover `root` (callers should fall back to in-memory filtering).
     static func searchPaths(terms: [String], root: URL?) -> Set<String>? {
         guard !terms.isEmpty, let root else { return nil }
         guard let database = openDatabase() else { return nil }
         defer { sqlite3_close(database) }
+
+        var metaStmt: OpaquePointer?
+        guard sqlite3_prepare_v2(database, "SELECT value FROM search_meta WHERE key = 'fts_root'",
+                                 -1, &metaStmt, nil) == SQLITE_OK else { return nil }
+        let coveredRoot = sqlite3_step(metaStmt) == SQLITE_ROW
+            ? sqlite3_column_text(metaStmt, 0).map { String(cString: $0) } : nil
+        sqlite3_finalize(metaStmt)
+        guard coveredRoot == root.standardizedFileURL.path else { return nil }
 
         // Build FTS5 query: each term becomes a prefix match, combined with implicit AND
         let ftsQuery = terms.compactMap { term -> String? in
@@ -592,8 +627,6 @@ enum FileIndex {
                 if rootPrefixes.contains(where: path.hasPrefix) { paths.insert(path) }
             }
         }
-        // A different folder may have rebuilt FTS while this folder is showing
-        // saved results. Fall back to in-memory matching until its scan finishes.
-        return paths.isEmpty ? nil : paths
+        return paths
     }
 }

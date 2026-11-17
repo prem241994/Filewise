@@ -18,7 +18,7 @@ struct SearchSuggestionsView: View {
             SuggestionItem(title: "PDFs from last week", query: "pdf from last week", icon: "doc.text", color: .red),
             SuggestionItem(title: "Recent Screenshots", query: "recent screenshots", icon: "camera.viewfinder", color: .pink),
             SuggestionItem(title: "Large files (> 100 MB)", query: "large", icon: "externaldrive", color: .orange),
-            SuggestionItem(title: "Recent downloads", query: "downloads", icon: "arrow.down.circle", color: .blue),
+            SuggestionItem(title: "Recent downloads", query: "recent downloads", icon: "arrow.down.circle", color: .blue),
             SuggestionItem(title: "Duplicate files", query: "duplicates", icon: "square.on.square", color: .purple),
             SuggestionItem(title: "Modified last week", query: "from last week", icon: "calendar", color: .teal)
         ]

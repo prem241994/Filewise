@@ -31,6 +31,9 @@ final class Library: ObservableObject {
     @Published var category = "Home" {
         didSet {
             if category != oldValue {
+                // Selection is per view, so files hidden by navigation can
+                // never be moved to Trash by mistake.
+                selectedIDs.removeAll()
                 updateVisible()
             }
         }
@@ -68,6 +71,7 @@ final class Library: ObservableObject {
     private var watcher: FileWatcher?
     private var rescanWorkItem: DispatchWorkItem?
     private var searchWorkItem: DispatchWorkItem?
+    private var visibleGeneration = 0
     private var changesDuringScan = false
     private static let folderBookmarkKey = "filewise.selectedFolderBookmark"
     private static let customFolderBookmarkKey = "filewise.customFolderBookmark"
@@ -417,6 +421,9 @@ final class Library: ObservableObject {
         }
         summaries = totals
         downloadSources = sourcesTotals
+        if !selectedIDs.isEmpty {
+            selectedIDs.formIntersection(items.map(\.id))
+        }
         files = items
         updateVisible(filesOverride: items)
     }
@@ -522,6 +529,9 @@ final class Library: ObservableObject {
         if folder != url {
             lastTrashBatchId = nil
             canUndoTrash = false
+            selectedIDs.removeAll()
+            inspectedItem = nil
+            previewURL = nil
             watcher = nil
             rescanWorkItem?.cancel()
             rescanWorkItem = nil
@@ -666,7 +676,7 @@ final class Library: ObservableObject {
             let saved = FileIndex.save(items, root: url,
                                        previous: loaded, token: token)
             let indexError = saved ? nil : FileIndex.lastError
-            if saved { FileIndex.rebuildSearchIndex(items, token: token) }
+            if saved { FileIndex.rebuildSearchIndex(items, root: url, token: token) }
             DispatchQueue.main.async {
                 guard self.scanID == id, !token.isCancelled else { return }
                 self.updateFiles(items)
@@ -742,6 +752,10 @@ final class Library: ObservableObject {
 
     func updateVisible(filesOverride: [FileItem]? = nil) {
         searchWorkItem?.cancel()
+        // Filtering runs concurrently; only the newest request may publish,
+        // so a slow older pass cannot restore files that were since removed.
+        visibleGeneration += 1
+        let generation = visibleGeneration
 
         let currentQuery = query
         let currentCategory = category
@@ -759,10 +773,8 @@ final class Library: ObservableObject {
                 folder: currentFolder
             )
             DispatchQueue.main.async {
-                guard let self = self else { return }
-                if self.query == currentQuery && self.category == currentCategory {
-                    self.visible = filtered
-                }
+                guard let self = self, self.visibleGeneration == generation else { return }
+                self.visible = filtered
             }
         }
         searchWorkItem = work
@@ -794,9 +806,13 @@ final class Library: ObservableObject {
         }
         let wantsDownloads = words.contains("downloads") || words.contains("download")
         let wantsLarge = words.contains("large")
+        let duplicateAliases: Set<String> = ["duplicate", "duplicates", "dupe", "dupes"]
+        let wantsDuplicates = words.contains { duplicateAliases.contains($0) }
         var ignored = Set(["find", "show", "me", "my", "from", "in", "the", "a", "last", "week", "recent", "files", "file", "pdf", "pdfs", "video", "videos", "downloads", "download", "large"])
+        ignored.formUnion(duplicateAliases)
         ignored.formUnion(screenshotAliases)
         let terms = words.filter { !ignored.contains($0) }
+        let foldedTerms = terms.map { $0.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
         let ftsMatchedPaths = terms.isEmpty ? nil : FileIndex.searchPaths(terms: terms, root: folder)
         let calendar = Calendar.current
         let previousWeek = calendar.dateInterval(of: .weekOfYear, for: calendar.date(byAdding: .weekOfYear, value: -1, to: Date()) ?? Date())
@@ -829,12 +845,23 @@ final class Library: ObservableObject {
                 && (!wantsScreenshots || item.isScreenshot)
                 && (!wantsDownloads || item.isDownload)
                 && (!wantsLarge || item.isLarge)
+                && (!wantsDuplicates || item.duplicate)
                 && (!lastWeek || (previousWeek?.contains(item.modified) ?? false))
                 && (!recent || item.modified >= recentCutoff)
-                && (ftsMatchedPaths != nil
-                    ? ftsMatchedPaths!.contains(item.url.path)
-                    : terms.allSatisfy { item.name.localizedCaseInsensitiveContains($0) || item.url.deletingLastPathComponent().path.localizedCaseInsensitiveContains($0) })
+                && (terms.isEmpty || (ftsMatchedPaths.map { $0.contains(item.url.path) }
+                    ?? matchesWordPrefixes(item, terms: foldedTerms)))
         }
+    }
+
+    /// In-memory equivalent of the FTS5 query, used while the search index
+    /// covers a different folder: every term must begin a word in the file's
+    /// name, parent folder path, or download source.
+    private static func matchesWordPrefixes(_ item: FileItem, terms: [String]) -> Bool {
+        let text = [item.name, item.url.deletingLastPathComponent().path, item.downloadSource ?? ""]
+            .joined(separator: " ")
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+        let words = text.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+        return terms.allSatisfy { term in words.contains { $0.hasPrefix(term) } }
     }
 
     var duplicateBytes: Int64 { summary(for: "Duplicates").bytes }

@@ -59,6 +59,15 @@ struct ScanSearchHarness {
             try content.write(to: url)
         }
 
+        // Mark one file as downloaded from Canva, as Safari does.
+        let sourcePlist = try PropertyListSerialization.data(fromPropertyList: ["https://www.canva.com/design/abc"],
+                                                             format: .binary, options: 0)
+        let sourceResult = sourcePlist.withUnsafeBytes {
+            setxattr(root.appendingPathComponent("specialtoken-report.txt").path,
+                     "com.apple.metadata:kMDItemWhereFroms", $0.baseAddress, sourcePlist.count, 0, 0)
+        }
+        try require(sourceResult == 0, "could not set the download source fixture")
+
         let calendar = Calendar.current
         let previousWeek = try requireDate(calendar.dateInterval(of: .weekOfYear,
             for: calendar.date(byAdding: .weekOfYear, value: -1, to: Date()) ?? Date())?.start)
@@ -132,6 +141,29 @@ struct ScanSearchHarness {
         try require(waitUntil { library.visible.map(\.name) == ["holiday.mov"] },
                     "large files search did not use the size threshold")
 
+        // Identical "fixture" contents make the PDFs and the small video duplicates.
+        library.query = "duplicates"
+        try require(waitUntil { Set(library.visible.map(\.name)) == ["weekly-report.pdf", "current-report.pdf", "short-clip.mp4"] },
+                    "duplicates keyword did not filter to duplicate files")
+        library.query = "duplicate pdfs"
+        try require(waitUntil { Set(library.visible.map(\.name)) == ["weekly-report.pdf", "current-report.pdf"] },
+                    "duplicate keyword did not combine with a file type")
+        library.query = "canva"
+        try require(waitUntil { library.visible.map(\.name) == ["specialtoken-report.txt"] },
+                    "download source search did not use the search index")
+        library.query = "report"
+        try require(waitUntil { library.visible.count == 3 }, "word-prefix search missed a hyphenated name")
+        library.query = "eport"
+        try require(waitUntil { library.visible.isEmpty }, "search matched the middle of a word")
+
+        library.query = ""
+        library.category = "Documents"
+        try require(waitUntil { !library.visible.isEmpty }, "Documents category was empty")
+        library.toggleSelection(for: library.visible[0])
+        library.category = "Apps"
+        try require(library.selectedIDs.isEmpty, "selection carried over to another category")
+        library.category = "Home"
+
         library.query = "specialtoken"
 
         // Simulate a different folder becoming the active FTS index while this
@@ -140,12 +172,17 @@ struct ScanSearchHarness {
         try Data("other".utf8).write(to: otherURL)
         let other = FileItem(url: otherURL, size: 5, modified: Date(), changed: nil,
                              duplicate: false, hash: nil, downloadSource: nil)
-        FileIndex.rebuildSearchIndex([other], token: ScanToken())
+        FileIndex.rebuildSearchIndex([other], root: otherRoot, token: ScanToken())
         try require(FileIndex.searchPaths(terms: ["specialtoken"], root: root) == nil,
                     "FTS leaked matches from another folder")
         library.updateVisible()
         try require(waitUntil { library.visible.count == 1 },
                     "cached results did not fall back to filename matching")
+        library.query = "canva"
+        try require(waitUntil { library.visible.map(\.name) == ["specialtoken-report.txt"] },
+                    "fallback matching ignored the download source")
+        library.query = "eport"
+        try require(waitUntil { library.visible.isEmpty }, "fallback matching differed from the search index")
 
         library.query = ""
         try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: restricted.path)

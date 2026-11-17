@@ -27,6 +27,8 @@ import SQLite3
             let old = """
             CREATE TABLE files (root TEXT NOT NULL, path TEXT NOT NULL, size INTEGER NOT NULL, modified REAL NOT NULL, duplicate INTEGER NOT NULL, PRIMARY KEY(root,path));
             CREATE TABLE trash_manifest (original_path TEXT PRIMARY KEY, trash_path TEXT NOT NULL, name TEXT NOT NULL, size INTEGER NOT NULL, trashed_at REAL NOT NULL, batch_id TEXT NOT NULL);
+            CREATE VIRTUAL TABLE files_fts USING fts5(name, kind, dirpath, filepath UNINDEXED);
+            INSERT INTO files_fts VALUES ('example', '', '/tmp', '/tmp/example');
             INSERT INTO trash_manifest VALUES ('/original','/trash','file',42,1,'batch');
             INSERT INTO files VALUES ('/tmp','/tmp/example',42,1,0);
             """
@@ -36,6 +38,13 @@ import SQLite3
             precondition(files?.count == 1)
             precondition(FileIndex.fetchTrashBatch(batchId: "batch").first?.originalPath == "/original")
             precondition(FileIndex.lastError == nil)
+            // The older search index is replaced, and is not used until rescanned.
+            precondition(FileIndex.searchPaths(terms: ["example"], root: URL(fileURLWithPath: "/tmp")) == nil)
+            let tmpItem = FileItem(url: URL(fileURLWithPath: "/tmp/example"), size: 42, modified: Date(), changed: nil,
+                                   duplicate: false, hash: nil, downloadSource: "GitHub")
+            FileIndex.rebuildSearchIndex([tmpItem], root: URL(fileURLWithPath: "/tmp"), token: ScanToken())
+            precondition(FileIndex.searchPaths(terms: ["github"], root: URL(fileURLWithPath: "/tmp")) == ["/tmp/example"])
+            precondition(FileIndex.searchPaths(terms: ["missing"], root: URL(fileURLWithPath: "/tmp")) == [])
             let exportURL = directory.deletingLastPathComponent().appendingPathComponent("export-\(UUID().uuidString).json")
             defer { try? FileManager.default.removeItem(at: exportURL) }
             let exported = try FileIndex.exportTrashRecords(to: exportURL)
@@ -49,6 +58,7 @@ import SQLite3
             precondition(FileIndex.fetchTrashBatch(batchId: "batch").count == 1)
             precondition(FileIndex.resetDerivedIndex())
             precondition(FileIndex.load(root: URL(fileURLWithPath: "/tmp"))?.isEmpty == true)
+            precondition(FileIndex.searchPaths(terms: ["github"], root: URL(fileURLWithPath: "/tmp")) == nil)
             precondition(FileIndex.fetchTrashBatch(batchId: "batch").first?.originalPath == "/original")
         }
         print("PASS: index \(mode)")

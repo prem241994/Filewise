@@ -448,8 +448,8 @@ struct ContentView: View {
                 .controlSize(.small)
             }
             Button {
+                // Dismissing only hides the message; ⌘Z can still undo.
                 library.bannerMessage = nil
-                library.canUndoTrash = false
             } label: {
                 Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundStyle(muted)
             }
