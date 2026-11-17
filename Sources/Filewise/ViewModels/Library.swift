@@ -566,6 +566,19 @@ final class Library: ObservableObject {
             guard !token.isCancelled else { return }
             let access = url.startAccessingSecurityScopedResource()
             defer { if access { url.stopAccessingSecurityScopedResource() } }
+            guard (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else {
+                DispatchQueue.main.async {
+                    guard self.scanID == id, !token.isCancelled else { return }
+                    self.scanning = false
+                    self.activeScan = nil
+                    self.watcher = nil
+                    self.rescanWorkItem?.cancel()
+                    self.rescanWorkItem = nil
+                    self.changesDuringScan = false
+                    self.status = self.files.isEmpty ? "Folder unavailable" : "Folder unavailable; showing saved results"
+                }
+                return
+            }
             let keys: [URLResourceKey] = [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey, .fileSizeKey,
                                           .contentModificationDateKey, .attributeModificationDateKey]
             var scanFailed = false
@@ -579,6 +592,10 @@ final class Library: ObservableObject {
                     guard self.scanID == id, !token.isCancelled else { return }
                     self.scanning = false
                     self.activeScan = nil
+                    self.watcher = nil
+                    self.rescanWorkItem?.cancel()
+                    self.rescanWorkItem = nil
+                    self.changesDuringScan = false
                     self.status = self.files.isEmpty ? "Folder unavailable" : "Folder unavailable; showing saved results"
                 }
                 return

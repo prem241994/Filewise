@@ -37,7 +37,7 @@ When you choose **Move to Trash**, Filewise records each move as it happens and 
 
 Run `./scripts/test-trash-cancellation.sh` to exercise a disposable temporary folder. The check cancels partway through a batch, verifies the SQLite index and Undo record, restores the files, and removes its fixture.
 
-Run `./scripts/test-scan-search.sh` to test scanning, cancellation, FTS search, and missing or restricted folders with 3,000 disposable files. Both integration checks use isolated temporary SQLite databases and remove their fixtures afterward.
+Run `./scripts/test-scan-search.sh` to test scanning, cancellation, FTS search, missing or restricted folders, and recovery after a folder disappears and returns, using disposable files. Both integration checks use isolated temporary SQLite databases and remove their fixtures afterward.
 
 Run `./scripts/test-trash-safety.sh` for isolated checks of partial cancellation, failed Undo writes, rollback, and restart recovery.
 

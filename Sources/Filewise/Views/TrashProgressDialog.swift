@@ -53,7 +53,9 @@ struct TrashProgressDialog: View {
             .frame(height: 8)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Trash progress")
-            .accessibilityValue("\(percentage) percent, \(library.trashCurrentCount) of \(library.trashTotalCount) files processed")
+            .accessibilityValue(library.trashIsCompleted
+                ? "Complete, \(library.trashCurrentCount) of \(library.trashTotalCount) files moved"
+                : "\(percentage) percent, \(library.trashCurrentCount) of \(library.trashTotalCount) files processed")
 
             // Status Card
             VStack(alignment: .leading, spacing: 7) {

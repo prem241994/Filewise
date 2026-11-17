@@ -108,7 +108,7 @@ struct ContentView: View {
             TrashProgressDialog(library: library)
         }
         .onKeyPress(.space) {
-            guard !isSearchFocused else { return .ignored }
+            guard isResultsFocused else { return .ignored }
             if let inspected = library.inspectedItem {
                 if library.previewURL == nil {
                     library.previewURL = inspected.url
@@ -120,17 +120,17 @@ struct ContentView: View {
             return .ignored
         }
         .onKeyPress(.upArrow) {
-            guard !isSearchFocused else { return .ignored }
+            guard isResultsFocused else { return .ignored }
             moveSelection(delta: -1)
             return .handled
         }
         .onKeyPress(.downArrow) {
-            guard !isSearchFocused else { return .ignored }
+            guard isResultsFocused else { return .ignored }
             moveSelection(delta: 1)
             return .handled
         }
         .onKeyPress(.return) {
-            guard !isSearchFocused, let inspected = library.inspectedItem else { return .ignored }
+            guard isResultsFocused, let inspected = library.inspectedItem else { return .ignored }
             NSWorkspace.shared.open(inspected.url)
             return .handled
         }
@@ -148,7 +148,7 @@ struct ContentView: View {
             return .ignored
         }
         .onKeyPress(.delete) {
-            guard !isSearchFocused else { return .ignored }
+            guard isResultsFocused else { return .ignored }
             if !library.selectedIDs.isEmpty {
                 showTrashConfirmation = true
                 return .handled
@@ -169,7 +169,7 @@ struct ContentView: View {
                 isSearchFocused = true
                 return .handled
             }
-            if press.modifiers.contains(.command) && press.characters.lowercased() == "a" && !isSearchFocused {
+            if press.modifiers.contains(.command) && press.characters.lowercased() == "a" && isResultsFocused {
                 library.selectAllVisible()
                 return .handled
             }
@@ -549,6 +549,7 @@ struct ContentView: View {
                         Spacer()
                         Button("See all →") { library.category = "Clean Up" }.buttonStyle(.plain)
                             .font(.caption).foregroundStyle(muted)
+                            .accessibilityLabel("See all cleanup suggestions")
                     }
                     LazyVGrid(columns: columns, spacing: 16) {
                         cleanupCard("Duplicates", "square.on.square", .red)
@@ -564,6 +565,7 @@ struct ContentView: View {
                         Spacer()
                         Button("See all →") { library.category = "Recents" }.buttonStyle(.plain)
                             .font(.caption).foregroundStyle(muted)
+                            .accessibilityLabel("See all recent files")
                     }
                     if library.files.isEmpty {
                         Text(library.scanning ? "Indexing your files…" : "No files found")
@@ -592,7 +594,7 @@ struct ContentView: View {
                 .font(.title3.weight(.semibold))
             Text(library.indexUnavailable ? "Filewise could not save the index. Use Rebuild Index in the sidebar, or open its folder to keep a copy for recovery." : library.status == "Scan cancelled"
                  ? (library.files.isEmpty ? "This folder has not been indexed yet. Restart the scan to see its files." : "The scan stopped. Previous results are still available below.")
-                 : (library.files.isEmpty ? "Filewise could not read this folder. Check its permissions or choose another folder." : "Filewise could not read every file. Previous results are still available below."))
+                 : (library.files.isEmpty ? "Filewise could not read this folder. Check its permissions, reconnect its drive, or choose another folder." : "Filewise could not read this folder or all of its files. Check permissions or reconnect its drive. Previous results are still available below."))
                 .font(.subheadline)
                 .foregroundStyle(muted)
             HStack(spacing: 10) {
@@ -672,6 +674,7 @@ struct ContentView: View {
                     .buttonStyle(.plain)
                     .font(.caption)
                     .foregroundStyle(muted)
+                    .accessibilityLabel("See all download origins")
                 }
             }
 

@@ -113,6 +113,7 @@ struct DetailInspectorView: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
+                    .accessibilityLabel("Show in Finder")
                 }
 
                 Button(role: .destructive, action: onTrash) {
@@ -138,5 +139,6 @@ struct DetailInspectorView: View {
                 .lineLimit(2)
                 .textSelection(.enabled)
         }
+        .accessibilityElement(children: .combine)
     }
 }

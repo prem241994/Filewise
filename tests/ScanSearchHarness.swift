@@ -164,6 +164,32 @@ struct ScanSearchHarness {
                     "missing folder did not show an unavailable status")
         try require(!library.status.contains("saved results"),
                     "missing folder claimed saved results when none were available")
+
+        library.scan(external)
+        try require(waitUntil { !library.scanning }, "file-as-folder scan did not finish")
+        try require(library.status.contains("unavailable"), "a regular file was incorrectly indexed as a folder")
+
+        // Simulate an indexed external drive being disconnected and reconnected.
+        let recoveryRoot = base.appendingPathComponent("recovery", isDirectory: true)
+        let disconnectedRoot = base.appendingPathComponent("disconnected", isDirectory: true)
+        try FileManager.default.createDirectory(at: recoveryRoot, withIntermediateDirectories: true)
+        try Data("saved".utf8).write(to: recoveryRoot.appendingPathComponent("saved.txt"))
+        library.scan(recoveryRoot)
+        try require(waitUntil { !library.scanning && library.files.count == 1 }, "recovery fixture scan failed")
+        try FileManager.default.moveItem(at: recoveryRoot, to: disconnectedRoot)
+        library.scan(recoveryRoot)
+        try require(waitUntil { !library.scanning }, "disconnected folder scan did not finish")
+        try require(library.status.contains("showing saved results") && library.files.map(\.name) == ["saved.txt"],
+                    "disconnected folder lost saved results")
+        try require(FileIndex.load(root: recoveryRoot)?.count == 1, "disconnected folder replaced its index")
+        try FileManager.default.moveItem(at: disconnectedRoot, to: recoveryRoot)
+        try Data("new".utf8).write(to: recoveryRoot.appendingPathComponent("new.txt"))
+        library.scan(recoveryRoot)
+        try require(waitUntil { !library.scanning && library.files.count == 2 }, "reconnected folder did not refresh")
+        try require(Set(library.files.map(\.name)) == Set(["saved.txt", "new.txt"]), "reconnected folder results were incorrect")
+        try Data("after reconnect".utf8).write(to: recoveryRoot.appendingPathComponent("watched.txt"))
+        try require(waitUntil { library.files.contains { $0.name == "watched.txt" } },
+                    "file watcher did not detect changes after reconnecting the folder")
     }
 
     private static func requireDate(_ date: Date?) throws -> Date {
