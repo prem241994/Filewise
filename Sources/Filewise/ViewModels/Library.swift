@@ -202,24 +202,18 @@ final class Library: ObservableObject {
         playRequestID = item.id
     }
 
-    /// Selects every copy except the oldest file in each group of identical files.
-    func selectDuplicateCopies() {
-        let grouped = Dictionary(grouping: files.filter(\.duplicate)) { item -> String in
-            if let hash = item.hash {
-                return hash.map { String(format: "%02hhx", $0) }.joined()
-            }
-            return "\(item.size)_\(item.name)"
-        }
-        var toSelect = Set<String>()
-        for group in grouped.values where group.count > 1 {
-            let sorted = group.sorted { $0.modified < $1.modified }
-            toSelect.formUnion(sorted.dropFirst().map(\.id))
-        }
-        selectedIDs = toSelect
-        if !toSelect.isEmpty {
-            bannerMessage = "Selected \(toSelect.count) duplicate copies to review."
-        }
+    /// Selects every copy except the one `rule` keeps in each group of
+    /// identical files.
+    func selectDuplicateCopies(keeping rule: KeepRule = .oldest) {
+        let extras = DuplicateSelection.extraCopies(in: files, keeping: rule)
+        selectedIDs = extras
+        bannerMessage = extras.isEmpty
+            ? "No extra copies to select."
+            : "Selected \(extras.count) extra \(extras.count == 1 ? "copy" : "copies"), keeping the \(rule.summary) in each group. Review them before moving to Trash."
     }
+
+    /// Folders holding duplicates, for "keep the copy in this folder".
+    var foldersWithDuplicates: [String] { DuplicateSelection.foldersWithDuplicates(in: files) }
 
     // MARK: - Trash and Undo
 

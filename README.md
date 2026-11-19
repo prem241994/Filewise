@@ -50,6 +50,8 @@ Run `./scripts/test-trash-cancellation.sh` to exercise a disposable temporary fo
 
 Run `./scripts/test-scan-search.sh` to test scanning, cancellation, FTS search, missing or restricted folders, and recovery after a folder disappears and returns, using disposable files. Both integration checks use isolated temporary SQLite databases and remove their fixtures afterward.
 
+Run `./scripts/test-duplicates.sh` to check which copy each "Select Extra Copies" rule keeps (oldest, newest, shortest name, or the copy in a chosen folder).
+
 Run `./scripts/test-trash-safety.sh` for isolated checks of partial cancellation, failed Undo writes, rollback, and restart recovery.
 
 Run `./scripts/test-index-health.sh` to check migration of an older index, preservation of its Trash Undo records, and safe handling of a corrupt database. When an index is unavailable, use **Rebuild Index** in the sidebar to clear and rescan recoverable file metadata while retaining Trash Undo records. If the database itself cannot be read, it is left untouched; **Show Index Folder** opens its location for manual recovery. **Export Undo Records** attempts a read-only JSON export of any readable records, and indicates a partial export; it does not repair the database or automatically restore files.

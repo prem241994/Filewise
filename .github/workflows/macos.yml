@@ -22,6 +22,8 @@ jobs:
         run: zsh ./scripts/package.sh
       - name: Test index health
         run: ./scripts/test-index-health.sh
+      - name: Test duplicate keep rules
+        run: ./scripts/test-duplicates.sh
       - name: Test scanning and search
         run: ./scripts/test-scan-search.sh
       - name: Test Trash safety

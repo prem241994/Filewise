@@ -10,6 +10,14 @@ struct ResultsView: View {
     let onTrash: ([FileItem]) -> Void
     /// Views shown as a gallery, stored as comma-separated view names.
     @AppStorage("filewise.gridViews") private var gridViews = "Images,Videos,Screenshots"
+    @AppStorage("filewise.keepRule") private var keepRuleValue = KeepRule.oldest.rawValue
+
+    private var keepRule: KeepRule { KeepRule(rawValue: keepRuleValue) ?? .oldest }
+
+    private func selectExtraCopies(keeping rule: KeepRule) {
+        keepRuleValue = rule.rawValue
+        library.selectDuplicateCopies(keeping: rule)
+    }
 
     private var layoutKey: String { library.query.isEmpty ? library.category : "Search" }
     private var showsGrid: Bool { gridViews.split(separator: ",").contains { $0 == layoutKey } }
@@ -73,10 +81,7 @@ struct ResultsView: View {
                 .help("Show as a list or as a grid of previews")
             }
             if library.category == "Duplicates" && library.query.isEmpty && !library.visible.isEmpty {
-                Button { library.selectDuplicateCopies() } label: {
-                    Label("Select Extra Copies", systemImage: "checklist")
-                }
-                .help("Selects every copy except the oldest file in each group of identical files")
+                keepRuleMenu
             }
         }
     }
@@ -111,6 +116,44 @@ struct ResultsView: View {
             if !selected.isEmpty { onTrash(selected) }
         }
         .accessibilityLabel("Files")
+    }
+
+    /// Click selects extra copies with the last rule; the menu picks another.
+    private var keepRuleMenu: some View {
+        Menu {
+            Section("Keep in Each Group") {
+                ruleButton("Oldest Copy", .oldest)
+                ruleButton("Newest Copy", .newest)
+                ruleButton("Shortest Name", .shortestName)
+            }
+            let folders = library.foldersWithDuplicates.prefix(8)
+            if !folders.isEmpty {
+                Section("Keep the Copy In") {
+                    ForEach(Array(folders), id: \.self) { folder in
+                        ruleButton(folderLabel(folder), .inFolder(folder))
+                    }
+                }
+            }
+        } label: {
+            Label("Select Extra Copies", systemImage: "checklist")
+        } primaryAction: {
+            selectExtraCopies(keeping: keepRule)
+        }
+        .fixedSize()
+        .help("Selects every copy except the \(keepRule.summary) in each group of identical files. Use the arrow to choose which copy to keep.")
+    }
+
+    private func ruleButton(_ title: String, _ rule: KeepRule) -> some View {
+        Button { selectExtraCopies(keeping: rule) } label: {
+            if rule == keepRule { Label(title, systemImage: "checkmark") } else { Text(title) }
+        }
+    }
+
+    /// "Desktop › Downloads", relative to the selected folder.
+    private func folderLabel(_ path: String) -> String {
+        let probe = FileItem(url: URL(fileURLWithPath: path).appendingPathComponent("x"), size: 0, modified: .distantPast,
+                             changed: nil, duplicate: false, hash: nil, downloadSource: nil)
+        return library.displayLocation(for: probe)
     }
 
     // MARK: - Gallery
