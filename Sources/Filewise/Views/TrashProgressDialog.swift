@@ -1,3 +1,4 @@
+import FilewiseCore
 import SwiftUI
 
 struct TrashProgressDialog: View {

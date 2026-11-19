@@ -1,6 +1,6 @@
 # Filewise Project Status
 
-Last updated: 2026-11-14
+Last updated: 2026-11-19
 
 ## Current phase
 
@@ -82,6 +82,11 @@ Phase 2 — Local scanning, search, and dashboard
 - Showed locations relative to the selected folder instead of full system paths, and corrected singular/plural counts
 - Trash confirmations now name the files being moved; added File, Edit, and View menu commands
 - Added shared design tokens (`Views/Theme.swift`) and a light/dark UI snapshot script
+
+- Split the code into two modules: `FilewiseCore` (model, index, scanning, search, Trash, and watcher, with no UI) and the SwiftUI app
+- Moved scanning, search, and Trash/Undo out of the view model into `FolderScanner`, `FileSearch`, and `TrashService`; their safety steps and messages are unchanged
+- Adopted the Swift 6 language mode with complete data-race checking: the view model, navigation state, and icon cache run on the main actor; background work uses tasks with Sendable values; cancellation tokens use a system lock
+- Shared build settings in `scripts/common.sh`; all checks pass, and the 10,000-file benchmark is unchanged when old and new builds run back to back (0.37 s initial scan and refresh)
 
 ## Current limitations
 

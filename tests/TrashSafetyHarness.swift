@@ -1,6 +1,8 @@
+import FilewiseCore
 import Foundation
+import os
 
-@main struct TrashSafetyHarness {
+@main @MainActor struct TrashSafetyHarness {
     static func wait(_ test: () -> Bool) {
         let deadline = Date().addingTimeInterval(30)
         while !test() && Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.01)) }
@@ -21,7 +23,7 @@ import Foundation
         func makeLibrary() -> Library {
             let library = Library()
             library.folder = root
-            library.moveToTrash = { url in
+            library.trashOperations.moveToTrash = { url in
                 let target = trash.appendingPathComponent(url.lastPathComponent)
                 try FileManager.default.moveItem(at: url, to: target)
                 return target
@@ -32,10 +34,11 @@ import Foundation
         let second = try item("second.txt")
         let library = makeLibrary()
         library.files = [first, second]
-        var calls = 0
-        library.saveTrashRecord = { batch, records in
-            calls += 1
-            return calls == 3 ? false : FileIndex.recordTrash(batchId: batch, items: records)
+        // Trash operations run on a background task, so the counters are locked.
+        let calls = OSAllocatedUnfairLock(initialState: 0)
+        library.trashOperations.saveRecord = { batch, records in
+            let call = calls.withLock { $0 += 1; return $0 }
+            return call == 3 ? false : FileIndex.recordTrash(batchId: batch, items: records)
         }
         library.trashFiles(items: [first, second])
         wait { !library.isTrashing }
@@ -56,10 +59,10 @@ import Foundation
         let third = try item("third.txt")
         let failure = makeLibrary()
         failure.files = [third]
-        var saveCalls = 0
-        failure.saveTrashRecord = { batch, records in
-            saveCalls += 1
-            return saveCalls == 2 ? false : FileIndex.recordTrash(batchId: batch, items: records)
+        let saveCalls = OSAllocatedUnfairLock(initialState: 0)
+        failure.trashOperations.saveRecord = { batch, records in
+            let call = saveCalls.withLock { $0 += 1; return $0 }
+            return call == 2 ? false : FileIndex.recordTrash(batchId: batch, items: records)
         }
         failure.trashFiles(items: [third])
         wait { !failure.isTrashing }
@@ -70,7 +73,7 @@ import Foundation
         let fourth = try item("fourth.txt")
         let blocked = makeLibrary()
         blocked.files = [fourth]
-        blocked.saveTrashRecord = { _, _ in false }
+        blocked.trashOperations.saveRecord = { _, _ in false }
         blocked.trashFiles(items: [fourth])
         wait { !blocked.isTrashing }
         precondition(FileManager.default.fileExists(atPath: fourth.url.path), "file moved despite journal failure")
@@ -78,10 +81,11 @@ import Foundation
         let sixth = try item("sixth.txt")
         let cancelled = makeLibrary()
         cancelled.files = [fifth, sixth]
-        cancelled.moveToTrash = { url in
+        cancelled.trashOperations.moveToTrash = { url in
             let target = trash.appendingPathComponent(url.lastPathComponent)
             try FileManager.default.moveItem(at: url, to: target)
-            cancelled.cancelTrashing()
+            // Cancel as the user would, from the main actor, before the next file.
+            DispatchQueue.main.sync { MainActor.assumeIsolated { cancelled.cancelTrashing() } }
             return target
         }
         cancelled.trashFiles(items: [fifth, sixth])

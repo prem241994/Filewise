@@ -1,3 +1,4 @@
+import FilewiseCore
 import Foundation
 import SQLite3
 

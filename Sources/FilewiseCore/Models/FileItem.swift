@@ -1,19 +1,31 @@
 import Foundation
 
-struct FileItem: Identifiable {
-    let url: URL
-    let size: Int64
-    let modified: Date
-    let changed: Date?
-    var duplicate: Bool
-    var hash: Data?
-    var downloadSource: String?
-    var id: String { url.path }
-    var name: String { url.lastPathComponent }
-    var kind: String { url.pathExtension.lowercased() }
-    var displaySize: String { kind == "app" && size == 0 ? "Unavailable" : ByteCountFormatter.string(fromByteCount: size, countStyle: .file) }
+public struct FileItem: Identifiable, Sendable {
+    public let url: URL
+    public let size: Int64
+    public let modified: Date
+    public let changed: Date?
+    public var duplicate: Bool
+    public var hash: Data?
+    public var downloadSource: String?
 
-    var libraryCategory: String? {
+    public init(url: URL, size: Int64, modified: Date, changed: Date?,
+                duplicate: Bool, hash: Data?, downloadSource: String?) {
+        self.url = url
+        self.size = size
+        self.modified = modified
+        self.changed = changed
+        self.duplicate = duplicate
+        self.hash = hash
+        self.downloadSource = downloadSource
+    }
+
+    public var id: String { url.path }
+    public var name: String { url.lastPathComponent }
+    public var kind: String { url.pathExtension.lowercased() }
+    public var displaySize: String { kind == "app" && size == 0 ? "Unavailable" : ByteCountFormatter.string(fromByteCount: size, countStyle: .file) }
+
+    public var libraryCategory: String? {
         switch kind {
         case "jpg", "jpeg", "png", "heic", "webp", "gif", "tif", "tiff", "svg", "raw": "Images"
         case "mp4", "mov", "m4v", "avi", "mkv", "webm": "Videos"
@@ -25,7 +37,7 @@ struct FileItem: Identifiable {
         }
     }
 
-    var isImage: Bool {
+    public var isImage: Bool {
         switch kind {
         case "png", "jpg", "jpeg", "heic", "webp", "tif", "tiff", "gif", "svg", "raw":
             return true
@@ -34,7 +46,7 @@ struct FileItem: Identifiable {
         }
     }
 
-    var isScreenshot: Bool {
+    public var isScreenshot: Bool {
         guard isImage else { return false }
         let lower = name.lowercased()
         return lower.contains("screenshot")
@@ -44,17 +56,17 @@ struct FileItem: Identifiable {
             || lower.hasPrefix("cleanshot")
     }
 
-    var isDownload: Bool { url.pathComponents.contains("Downloads") }
-    var isLarge: Bool { size >= 100_000_000 }
-    var isOldScreenshot: Bool {
+    public var isDownload: Bool { url.pathComponents.contains("Downloads") }
+    public var isLarge: Bool { size >= 100_000_000 }
+    public var isOldScreenshot: Bool {
         isScreenshot && modified < (Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date())
     }
-    var isForgottenDownload: Bool {
+    public var isForgottenDownload: Bool {
         kind != "app" && isDownload && modified < (Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date())
     }
 
     /// Why this file is a cleanup candidate, in display order.
-    var cleanupReasons: [CleanupReason] {
+    public var cleanupReasons: [CleanupReason] {
         var reasons: [CleanupReason] = []
         if duplicate { reasons.append(.duplicate) }
         if isLarge { reasons.append(.large) }
@@ -62,12 +74,15 @@ struct FileItem: Identifiable {
         if isForgottenDownload { reasons.append(.forgottenDownload) }
         return reasons
     }
+
+    /// Whether any cleanup view suggests this file.
+    public var isCleanupCandidate: Bool { duplicate || isOldScreenshot || isForgottenDownload || isLarge }
 }
 
-enum CleanupReason: CaseIterable {
+public enum CleanupReason: CaseIterable, Sendable {
     case duplicate, large, oldScreenshot, forgottenDownload
 
-    var label: String {
+    public var label: String {
         switch self {
         case .duplicate: "Duplicate"
         case .large: "Large"
@@ -76,7 +91,7 @@ enum CleanupReason: CaseIterable {
         }
     }
 
-    var explanation: String {
+    public var explanation: String {
         switch self {
         case .duplicate: "Another file in this folder has identical contents."
         case .large: "Larger than 100 MB."
@@ -85,7 +100,7 @@ enum CleanupReason: CaseIterable {
         }
     }
 
-    var symbol: String {
+    public var symbol: String {
         switch self {
         case .duplicate: "square.on.square"
         case .large: "externaldrive"
@@ -95,12 +110,16 @@ enum CleanupReason: CaseIterable {
     }
 }
 
-struct TrashedRecord: Identifiable {
-    var id: String { originalPath }
-    let originalPath: String
-    let trashPath: String
-    let name: String
-    let size: Int64
-    let trashedAt: Date
-    let batchId: String
+public struct TrashedRecord: Identifiable, Sendable {
+    public var id: String { originalPath }
+    public let originalPath: String
+    public let trashPath: String
+    public let name: String
+    public let size: Int64
+    public let trashedAt: Date
+    public let batchId: String
 }
+
+/// One Trash journal row: written with an empty `trash` path before a move,
+/// then rewritten with the Trash location once the move succeeds.
+public typealias TrashJournalEntry = (original: String, trash: String, name: String, size: Int64)

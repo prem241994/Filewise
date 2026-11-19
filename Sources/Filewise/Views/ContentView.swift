@@ -1,4 +1,5 @@
 import AppKit
+import FilewiseCore
 import QuickLook
 import SwiftUI
 

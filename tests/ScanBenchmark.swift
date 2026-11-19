@@ -1,7 +1,8 @@
-import Foundation
 import Darwin
+import FilewiseCore
+import Foundation
 
-@main struct ScanBenchmark {
+@main @MainActor struct ScanBenchmark {
     static func wait(_ library: Library) -> Bool {
         let deadline = Date().addingTimeInterval(180)
         while library.scanning && Date() < deadline {

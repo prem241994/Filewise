@@ -1,4 +1,5 @@
 import Combine
+import FilewiseCore
 import Foundation
 
 enum ScanTestFailure: Error {
@@ -6,6 +7,7 @@ enum ScanTestFailure: Error {
 }
 
 @main
+@MainActor
 struct ScanSearchHarness {
     static func main() {
         do {
@@ -159,7 +161,7 @@ struct ScanSearchHarness {
         library.query = ""
         library.sortOrder = [KeyPathComparator(\FileItem.size, order: .reverse)]
         try require(waitUntil { library.visible.first?.name == "holiday.mov" }, "size sort did not put the largest file first")
-        library.sortOrder = Library.defaultSortOrder
+        library.sortOrder = FileSearch.defaultSortOrder
         try require(waitUntil { library.visible.first?.modified == library.files.first?.modified },
                     "default sort did not restore newest-first order")
         let weekly = try requireItem(library.files.first { $0.name == "weekly-report.pdf" })

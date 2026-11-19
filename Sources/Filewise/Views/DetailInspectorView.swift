@@ -1,4 +1,5 @@
 import AppKit
+import FilewiseCore
 import SwiftUI
 
 struct DetailInspectorView: View {

@@ -4,22 +4,19 @@
 # Steps are comma-separated name:category[:query][:select] entries.
 set -e
 
-project_dir=${0:A:h:h}
-build_dir="$project_dir/.build"
+source "${0:A:h}/common.sh"
 app_dir="$build_dir/snapshot/Filewise.app"
 output=${1:-$build_dir/snapshots}
 steps=${2:-"home:Home,duplicates:Duplicates::select,search:Home:report,cleanup:Clean Up::select"}
-sdk_dir=${FILEWISE_SDK_PATH:-$(xcrun --sdk macosx --show-sdk-path)}
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/filewise-snapshot.XXXXXX")
 db_dir=$(mktemp -d "${TMPDIR:-/tmp}/filewise-snapshot-db.XXXXXX")
 trap 'rm -rf "$fixture" "$db_dir"' EXIT
 
-mkdir -p "$app_dir/Contents/MacOS" "$output" "$build_dir/module-cache"
+mkdir -p "$app_dir/Contents/MacOS" "$output"
 cp "$project_dir/Resources/Info.plist" "$app_dir/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier app.filewise.snapshot" "$app_dir/Contents/Info.plist"
-swiftc -sdk "$sdk_dir" -module-cache-path "$build_dir/module-cache" \
-    -target "$(uname -m)-apple-macosx14.0" -swift-version 5 -parse-as-library -D FILEWISE_SNAPSHOT \
-    -framework SwiftUI -framework AppKit -framework CryptoKit -framework QuickLook -framework QuickLookUI -lsqlite3 \
+build_core "$build_dir/core"
+swiftc "${swift_flags[@]}" "${app_frameworks[@]}" "${core_link_flags[@]}" -D FILEWISE_SNAPSHOT \
     "$project_dir"/Sources/Filewise/**/*.swift "$project_dir"/tools/SnapshotHook.swift \
     -o "$app_dir/Contents/MacOS/Filewise"
 codesign --force --sign - "$app_dir" >/dev/null

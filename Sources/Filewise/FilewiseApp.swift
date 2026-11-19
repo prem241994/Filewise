@@ -1,5 +1,6 @@
-import SwiftUI
 import AppKit
+import FilewiseCore
+import SwiftUI
 
 @main
 struct FilewiseApp: App {
@@ -26,6 +27,7 @@ struct FilewiseApp: App {
     }
 }
 
+@MainActor
 final class FilewiseNavigation: ObservableObject {
     @Published var searchRequested = false
     @Published var showInspector = true

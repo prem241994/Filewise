@@ -17,6 +17,13 @@ For a local copy, run `zsh scripts/package.sh` to build and create `.build/Filew
 
 The build script uses the active macOS SDK selected by `xcrun` and builds for the current Mac's architecture. It invokes the Swift compiler directly; the local Swift Package Manager installation currently fails before compiling. The `Package.swift` manifest is available once the command line tools are repaired or Xcode is installed.
 
+## Code layout
+
+- `Sources/FilewiseCore` has no UI code: the file model, the SQLite index (`FileIndex`), folder scanning and duplicate detection (`FolderScanner`), search phrase parsing (`FileSearch`), journaled Trash and Undo (`TrashService`), and the folder watcher. It can be built and tested without SwiftUI.
+- `Sources/Filewise` is the app: SwiftUI views and the `Library` view model. `Library` runs on the main actor; it starts Core work on background tasks and applies only the results.
+
+Both modules use the Swift 6 language mode with complete data-race checking. `scripts/common.sh` holds the shared compiler settings and builds `FilewiseCore` as a static library that the app and the tests link against.
+
 If the active SDK and Swift compiler are incompatible, select a compatible installed SDK for the build and test scripts, for example: `export FILEWISE_SDK_PATH=/Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk`.
 
 ## Use

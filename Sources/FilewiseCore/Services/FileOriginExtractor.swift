@@ -1,9 +1,9 @@
 import Foundation
 
-enum FileOriginExtractor {
+public enum FileOriginExtractor {
     /// Extracts the web domain or application origin of a downloaded file
     /// using macOS extended attributes (`com.apple.metadata:kMDItemWhereFroms` and `com.apple.quarantine`).
-    static func origin(for url: URL) -> String? {
+    public static func origin(for url: URL) -> String? {
         let path = url.path
 
         // 1. Check com.apple.metadata:kMDItemWhereFroms (stores source URL array)

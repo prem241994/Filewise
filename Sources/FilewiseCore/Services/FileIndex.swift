@@ -3,19 +3,20 @@ import SQLite3
 import Darwin
 
 /// A local snapshot of file metadata for the currently selected folder.
-enum FileIndex {
+public enum FileIndex {
     private static let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-    private static var isSchemaInitialized = false
+    // Both are guarded by schemaLock.
+    nonisolated(unsafe) private static var isSchemaInitialized = false
     private static let schemaLock = NSLock()
-    private static var _lastError: String?
+    nonisolated(unsafe) private static var _lastError: String?
 
-    static var lastError: String? {
+    public static var lastError: String? {
         schemaLock.lock()
         defer { schemaLock.unlock() }
         return _lastError
     }
 
-    static var databaseDirectory: URL {
+    public static var databaseDirectory: URL {
         if let testDirectory = ProcessInfo.processInfo.environment["FILEWISE_TEST_DATABASE_DIRECTORY"],
            !testDirectory.isEmpty {
             return URL(fileURLWithPath: testDirectory, isDirectory: true)
@@ -133,7 +134,7 @@ enum FileIndex {
 
     /// Clears only rebuildable search data. The Undo manifest stays in the same
     /// transaction and is never replaced. An unreadable database is left intact.
-    static func resetDerivedIndex() -> Bool {
+    public static func resetDerivedIndex() -> Bool {
         guard let database = openDatabase() else { return false }
         defer { sqlite3_close(database) }
         guard sqlite3_exec(database, "BEGIN IMMEDIATE", nil, nil, nil) == SQLITE_OK else { return false }
@@ -147,7 +148,7 @@ enum FileIndex {
         return true
     }
 
-    static func load(root: URL) -> [FileItem]? {
+    public static func load(root: URL) -> [FileItem]? {
         guard let database = openDatabase() else { return nil }
         defer { sqlite3_close(database) }
 
@@ -190,7 +191,7 @@ enum FileIndex {
         return result == SQLITE_DONE ? items : nil
     }
 
-    static func save(_ items: [FileItem], root: URL,
+    public static func save(_ items: [FileItem], root: URL,
                      previous: [FileItem]?, token: ScanToken) -> Bool {
         let oldByPath = Dictionary(uniqueKeysWithValues:
             (previous ?? []).map { ($0.url.path, $0) })
@@ -277,7 +278,7 @@ enum FileIndex {
     }
 
     /// Quickly removes specific paths from both the files table and FTS search index.
-    static func removePaths(_ paths: Set<String>, root: URL) {
+    public static func removePaths(_ paths: Set<String>, root: URL) {
         guard !paths.isEmpty else { return }
         guard let database = openDatabase() else { return }
         defer { sqlite3_close(database) }
@@ -308,7 +309,7 @@ enum FileIndex {
     }
 
     /// Rapidly adds or restores items into the files table and FTS search index without full rescan.
-    static func addItems(_ items: [FileItem], root: URL) {
+    public static func addItems(_ items: [FileItem], root: URL) {
         guard !items.isEmpty, let database = openDatabase() else { return }
         defer { sqlite3_close(database) }
 
@@ -375,7 +376,7 @@ enum FileIndex {
     // MARK: - Trash Manifest & Undo
 
     @discardableResult
-    static func recordTrash(batchId: String, items: [(original: String, trash: String, name: String, size: Int64)]) -> Bool {
+    public static func recordTrash(batchId: String, items: [TrashJournalEntry]) -> Bool {
         guard !items.isEmpty, let database = openDatabase() else { return false }
         defer { sqlite3_close(database) }
 
@@ -409,7 +410,7 @@ enum FileIndex {
         return true
     }
 
-    static func hasUnresolvedTrashMove(root: URL) -> Bool {
+    public static func hasUnresolvedTrashMove(root: URL) -> Bool {
         guard let database = openDatabase() else { return false }
         defer { sqlite3_close(database) }
         var stmt: OpaquePointer?
@@ -427,7 +428,7 @@ enum FileIndex {
 
     /// Reads recoverable manifest rows without modifying or migrating the source.
     /// A partial export is explicitly reported if SQLite encounters damage mid-read.
-    static func exportTrashRecords(to destination: URL) throws -> (count: Int, partial: Bool) {
+    public static func exportTrashRecords(to destination: URL) throws -> (count: Int, partial: Bool) {
         let directoryPath = databaseDirectory.standardizedFileURL.path
         let outputPath = destination.standardizedFileURL.path
         guard !outputPath.hasPrefix(directoryPath + "/"), outputPath != directoryPath else {
@@ -466,7 +467,7 @@ enum FileIndex {
         return (rows.count, partial)
     }
 
-    static func latestTrashBatch(root: URL) -> String? {
+    public static func latestTrashBatch(root: URL) -> String? {
         guard let database = openDatabase() else { return nil }
         defer { sqlite3_close(database) }
         var stmt: OpaquePointer?
@@ -481,7 +482,7 @@ enum FileIndex {
         return nil
     }
 
-    static func fetchTrashBatch(batchId: String) -> [TrashedRecord] {
+    public static func fetchTrashBatch(batchId: String) -> [TrashedRecord] {
         guard let database = openDatabase() else { return [] }
         defer { sqlite3_close(database) }
 
@@ -512,7 +513,7 @@ enum FileIndex {
         return records
     }
 
-    static func removeTrashRecords(originalPaths: Set<String>) {
+    public static func removeTrashRecords(originalPaths: Set<String>) {
         guard !originalPaths.isEmpty, let database = openDatabase() else { return }
         defer { sqlite3_close(database) }
 
@@ -541,7 +542,7 @@ enum FileIndex {
 
     /// Rebuilds the FTS5 search index from the given items and records which
     /// folder it covers. Called after a successful save to keep search in sync.
-    static func rebuildSearchIndex(_ items: [FileItem], root: URL, token: ScanToken) {
+    public static func rebuildSearchIndex(_ items: [FileItem], root: URL, token: ScanToken) {
         guard let database = openDatabase() else { return }
         defer { sqlite3_close(database) }
         guard sqlite3_exec(database, "BEGIN IMMEDIATE TRANSACTION",
@@ -584,7 +585,7 @@ enum FileIndex {
     /// Queries the FTS5 index for files matching the given search terms.
     /// Returns the matching file paths (possibly empty), or nil when the index
     /// does not cover `root` (callers should fall back to in-memory filtering).
-    static func searchPaths(terms: [String], root: URL?) -> Set<String>? {
+    public static func searchPaths(terms: [String], root: URL?) -> Set<String>? {
         guard !terms.isEmpty, let root else { return nil }
         guard let database = openDatabase() else { return nil }
         defer { sqlite3_close(database) }
@@ -614,13 +615,7 @@ enum FileIndex {
         sqlite3_bind_text(stmt, 1, ftsQuery, -1, transient)
 
         var paths = Set<String>()
-        let canonicalRoot: String? = root.path.withCString { path in
-            guard let resolved = realpath(path, nil) else { return nil }
-            defer { free(resolved) }
-            return String(cString: resolved)
-        }
-        let rootPaths = Set([root.standardizedFileURL.path, canonicalRoot ?? root.path])
-        let rootPrefixes = rootPaths.map { $0 == "/" ? "/" : $0 + "/" }
+        let rootPrefixes = PathPrefixes.forFolder(root)
         while sqlite3_step(stmt) == SQLITE_ROW {
             if let p = sqlite3_column_text(stmt, 0) {
                 let path = String(cString: p)

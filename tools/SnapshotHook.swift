@@ -1,9 +1,11 @@
 #if FILEWISE_SNAPSHOT
 import AppKit
+import FilewiseCore
 
 /// Development-only UI capture. Compiled solely by scripts/snapshot-ui.sh
 /// (with -D FILEWISE_SNAPSHOT); never part of the shipping app. It renders the
 /// window from inside the process, so no Screen Recording permission is needed.
+@MainActor
 enum SnapshotHook {
     static weak var library: Library?
 
@@ -13,31 +15,31 @@ enum SnapshotHook {
         let appearance = env["FILEWISE_SNAPSHOT_APPEARANCE"] ?? "light"
         // Each step is name:category[:query][:select]
         let steps = (env["FILEWISE_SNAPSHOT_STEPS"] ?? "home:Home").split(separator: ",").map(String.init)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+        Task {
+            try? await Task.sleep(for: .seconds(1))
             NSApp.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
             library?.scan(URL(fileURLWithPath: folder))
-            run(steps, output: URL(fileURLWithPath: output), appearance: appearance)
+            await run(steps, output: URL(fileURLWithPath: output), appearance: appearance)
+            NSApp.terminate(nil)
         }
     }
 
-    private static func run(_ steps: [String], output: URL, appearance: String) {
-        guard let library, !library.scanning else {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { run(steps, output: output, appearance: appearance) }
-            return
-        }
-        guard let step = steps.first else { NSApp.terminate(nil); return }
-        let parts = step.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
-        library.query = ""
-        library.category = parts.count > 1 ? parts[1] : "Home"
-        library.query = parts.count > 2 ? parts[2] : ""
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+    private static func run(_ steps: [String], output: URL, appearance: String) async {
+        for step in steps {
+            while library == nil || library?.scanning == true {
+                try? await Task.sleep(for: .milliseconds(300))
+            }
+            guard let library else { return }
+            let parts = step.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+            library.query = ""
+            library.category = parts.count > 1 ? parts[1] : "Home"
+            library.query = parts.count > 2 ? parts[2] : ""
+            try? await Task.sleep(for: .milliseconds(800))
             if parts.count > 3, parts[3] == "select", let first = library.visible.first ?? library.files.first {
                 library.selectedIDs = [first.id]
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                capture(to: output.appendingPathComponent("\(parts[0])-\(appearance).png"))
-                run(Array(steps.dropFirst()), output: output, appearance: appearance)
-            }
+            try? await Task.sleep(for: .milliseconds(1200))
+            capture(to: output.appendingPathComponent("\(parts[0])-\(appearance).png"))
         }
     }
 

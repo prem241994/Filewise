@@ -1,4 +1,5 @@
 import Combine
+import FilewiseCore
 import Foundation
 
 enum TestFailure: Error {
@@ -6,6 +7,7 @@ enum TestFailure: Error {
 }
 
 @main
+@MainActor
 struct TrashCancellationHarness {
     static func main() {
         do {

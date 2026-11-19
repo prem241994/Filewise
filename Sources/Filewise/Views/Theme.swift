@@ -1,4 +1,5 @@
 import AppKit
+import FilewiseCore
 import SwiftUI
 
 /// Shared design tokens. Colors are semantic or tinted so every surface reads
@@ -117,14 +118,15 @@ enum Theme {
         }
     }
 
-    private static let byteFormatter: ByteCountFormatter = {
+    // Formatters are not thread-safe; only views use this one.
+    @MainActor private static let byteFormatter: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
         formatter.allowsNonnumericFormatting = false
         return formatter
     }()
 
-    static func bytes(_ count: Int64) -> String { byteFormatter.string(fromByteCount: count) }
+    @MainActor static func bytes(_ count: Int64) -> String { byteFormatter.string(fromByteCount: count) }
 
     /// "1 file", "3 files"
     static func count(_ value: Int, _ singular: String, _ plural: String? = nil) -> String {

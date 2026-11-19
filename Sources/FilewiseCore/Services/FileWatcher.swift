@@ -2,22 +2,16 @@ import CoreServices
 import Foundation
 
 /// Watches a selected folder and its descendants for filesystem changes.
-final class FileWatcher {
+/// Events are delivered on the main queue, so `onChange` runs on the main actor.
+public final class FileWatcher {
     private var stream: FSEventStreamRef?
-    private let onChange: () -> Void
+    private let onChange: @MainActor () -> Void
     private let rootPrefixes: [String]
     private let indexPath = FileIndex.databaseDirectory.path
 
-    init?(root: URL, onChange: @escaping () -> Void) {
+    public init?(root: URL, onChange: @escaping @MainActor () -> Void) {
         self.onChange = onChange
-        // FSEvents reports canonical paths (for example /private/var for /var).
-        let canonical: String? = root.path.withCString { path in
-            guard let resolved = realpath(path, nil) else { return nil }
-            defer { free(resolved) }
-            return String(cString: resolved)
-        }
-        self.rootPrefixes = Set([root.standardizedFileURL.path, canonical ?? root.path])
-            .map { $0.hasSuffix("/") ? $0 : $0 + "/" }
+        self.rootPrefixes = PathPrefixes.forFolder(root)
         var context = FSEventStreamContext(
             version: 0,
             info: Unmanaged.passUnretained(self).toOpaque(),
@@ -32,7 +26,9 @@ final class FileWatcher {
             let watcher = Unmanaged<FileWatcher>.fromOpaque(info).takeUnretainedValue()
             let eventPaths = Unmanaged<CFArray>.fromOpaque(paths).takeUnretainedValue() as? [String] ?? []
             if eventPaths.prefix(count).contains(where: watcher.isRelevant) {
-                watcher.onChange()
+                // The stream's dispatch queue is the main queue.
+                let onChange = watcher.onChange
+                MainActor.assumeIsolated { onChange() }
             }
         }
         guard let stream = FSEventStreamCreate(nil, callback, &context,
