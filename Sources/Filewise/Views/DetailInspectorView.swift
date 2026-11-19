@@ -33,6 +33,9 @@ struct DetailInspectorView: View {
                             ? item.displaySize
                             : "\(item.displaySize) (\(item.size.formatted()) bytes)")
                     metaRow("Modified", item.modified.formatted(date: .abbreviated, time: .shortened))
+                    if let lastOpened = item.lastOpened {
+                        metaRow("Last Opened", lastOpened.formatted(date: .abbreviated, time: .shortened))
+                    }
                     if let source = item.downloadSource {
                         metaRow("Downloaded From", source)
                     }

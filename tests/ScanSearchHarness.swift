@@ -247,6 +247,47 @@ struct ScanSearchHarness {
         try Data("after reconnect".utf8).write(to: recoveryRoot.appendingPathComponent("watched.txt"))
         try require(waitUntil { library.files.contains { $0.name == "watched.txt" } },
                     "file watcher did not detect changes after reconnecting the folder")
+
+        // Old downloads count as forgotten only if they were not opened recently.
+        let usageRoot = base.appendingPathComponent("usage", isDirectory: true)
+        let downloads = usageRoot.appendingPathComponent("Downloads", isDirectory: true)
+        try FileManager.default.createDirectory(at: downloads, withIntermediateDirectories: true)
+        let opened = downloads.appendingPathComponent("opened-last-week.zip")
+        let untouched = downloads.appendingPathComponent("untouched.zip")
+        let twoMonthsAgo = Date().addingTimeInterval(-60 * 86_400)
+        for file in [opened, untouched] {
+            try Data(file.lastPathComponent.utf8).write(to: file)
+            try FileManager.default.setAttributes([.modificationDate: twoMonthsAgo], ofItemAtPath: file.path)
+        }
+        let lastWeek = Date().addingTimeInterval(-7 * 86_400)
+        try setLastOpened(lastWeek, on: opened)
+        library.scan(usageRoot)
+        try require(waitUntil { !library.scanning && library.files.count == 2 }, "usage fixture scan failed")
+        let openedItem = try requireItem(library.files.first { $0.name == "opened-last-week.zip" })
+        try require(abs((openedItem.lastOpened?.timeIntervalSince1970 ?? 0) - lastWeek.timeIntervalSince1970) < 1,
+                    "last-opened date was not read")
+        try require(!openedItem.isForgottenDownload, "a recently opened download was called old")
+        try require(library.files.first { $0.name == "untouched.zip" }?.isForgottenDownload == true,
+                    "an unopened old download was not suggested")
+        try require(FileIndex.load(root: usageRoot)?.first { $0.name == "opened-last-week.zip" }?.lastOpened != nil,
+                    "last-opened date was not saved in the index")
+        // Opening a file later must be noticed, not hidden by the saved value.
+        try setLastOpened(Date(), on: untouched)
+        library.scan(usageRoot)
+        try require(waitUntil { !library.scanning && library.files.first { $0.name == "untouched.zip" }?.isForgottenDownload == false },
+                    "a newly opened download stayed suggested after rescanning")
+    }
+
+    /// Writes the attribute macOS records when a file is opened.
+    private static func setLastOpened(_ date: Date, on url: URL) throws {
+        let seconds = Int64(date.timeIntervalSince1970)
+        let nanoseconds = Int64((date.timeIntervalSince1970 - Double(seconds)) * 1_000_000_000)
+        var bytes: [UInt8] = []
+        for value in [seconds, nanoseconds] {
+            bytes += withUnsafeBytes(of: value.littleEndian, Array.init)
+        }
+        let result = setxattr(url.path, FileUsage.lastUsedAttribute, bytes, bytes.count, 0, 0)
+        try require(result == 0, "could not set the last-opened fixture")
     }
 
     private static func requireItem(_ item: FileItem?) throws -> FileItem {

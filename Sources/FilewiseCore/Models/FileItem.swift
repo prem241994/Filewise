@@ -8,9 +8,11 @@ public struct FileItem: Identifiable, Sendable {
     public var duplicate: Bool
     public var hash: Data?
     public var downloadSource: String?
+    /// When the file was last opened, as recorded by macOS.
+    public var lastOpened: Date?
 
     public init(url: URL, size: Int64, modified: Date, changed: Date?,
-                duplicate: Bool, hash: Data?, downloadSource: String?) {
+                duplicate: Bool, hash: Data?, downloadSource: String?, lastOpened: Date? = nil) {
         self.url = url
         self.size = size
         self.modified = modified
@@ -18,6 +20,7 @@ public struct FileItem: Identifiable, Sendable {
         self.duplicate = duplicate
         self.hash = hash
         self.downloadSource = downloadSource
+        self.lastOpened = lastOpened
     }
 
     public var id: String { url.path }
@@ -64,8 +67,10 @@ public struct FileItem: Identifiable, Sendable {
     public var isOldScreenshot: Bool {
         isScreenshot && modified < (Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date())
     }
+    /// The later of the last modification and the last time it was opened.
+    public var lastUsed: Date { max(modified, lastOpened ?? .distantPast) }
     public var isForgottenDownload: Bool {
-        kind != "app" && isDownload && modified < (Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date())
+        kind != "app" && isDownload && lastUsed < (Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date())
     }
 
     /// Why this file is a cleanup candidate, in display order.
@@ -99,7 +104,7 @@ public enum CleanupReason: CaseIterable, Sendable {
         case .duplicate: "Another file in this folder has identical contents."
         case .large: "Larger than 100 MB."
         case .oldScreenshot: "A screenshot last modified more than 30 days ago."
-        case .forgottenDownload: "In Downloads and not modified for more than 30 days."
+        case .forgottenDownload: "In Downloads and not opened or modified for more than 30 days."
         }
     }
 

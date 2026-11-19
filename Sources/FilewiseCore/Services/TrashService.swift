@@ -161,7 +161,8 @@ public enum TrashService {
                     changed: values?.attributeModificationDate,
                     duplicate: false,
                     hash: nil,
-                    downloadSource: FileOriginExtractor.origin(for: destURL)
+                    downloadSource: FileOriginExtractor.origin(for: destURL),
+                    lastOpened: FileUsage.lastOpened(for: destURL)
                 ))
             } catch {
                 NSLog("Failed to restore \(record.name): \(error)")

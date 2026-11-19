@@ -60,7 +60,10 @@ public enum FolderScanner {
             found.append(FileItem(url: file, size: size, modified: modified, changed: changed,
                                   duplicate: false,
                                   hash: unchanged ? old?.hash : nil,
-                                  downloadSource: unchanged ? old?.downloadSource : FileOriginExtractor.origin(for: file)))
+                                  downloadSource: unchanged ? old?.downloadSource : FileOriginExtractor.origin(for: file),
+                                  // Opening a file rewrites this attribute, which
+                                  // changes the attribute date, so reuse is safe.
+                                  lastOpened: unchanged ? old?.lastOpened : FileUsage.lastOpened(for: file)))
             if found.count.isMultiple(of: 250) { progress(found.count) }
         }
         guard !token.isCancelled else { return .cancelled }

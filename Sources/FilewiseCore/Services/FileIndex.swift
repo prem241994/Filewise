@@ -80,7 +80,7 @@ public enum FileIndex {
             )
             """
         guard sqlite3_exec(database, schema, nil, nil, nil) == SQLITE_OK else { return false }
-        for (name, type) in [("changed", "REAL"), ("hash", "BLOB"), ("download_source", "TEXT")] {
+        for (name, type) in [("changed", "REAL"), ("hash", "BLOB"), ("download_source", "TEXT"), ("last_opened", "REAL")] {
             if !hasColumn(name, in: "files", database: database) {
                 guard sqlite3_exec(database, "ALTER TABLE files ADD COLUMN \(name) \(type)", nil, nil, nil) == SQLITE_OK else { return false }
             }
@@ -153,7 +153,7 @@ public enum FileIndex {
         defer { sqlite3_close(database) }
 
         var statement: OpaquePointer?
-        let sql = "SELECT path, size, modified, changed, duplicate, hash, download_source FROM files WHERE root = ? ORDER BY modified DESC"
+        let sql = "SELECT path, size, modified, changed, duplicate, hash, download_source, last_opened FROM files WHERE root = ? ORDER BY modified DESC"
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK else { return nil }
         defer { sqlite3_finalize(statement) }
         sqlite3_bind_text(statement, 1, root.path, -1, transient)
@@ -176,6 +176,8 @@ public enum FileIndex {
                 } else {
                     downloadSource = nil
                 }
+                let lastOpened = sqlite3_column_type(statement, 7) == SQLITE_NULL
+                    ? nil : Date(timeIntervalSince1970: sqlite3_column_double(statement, 7))
                 items.append(FileItem(
                     url: URL(fileURLWithPath: String(cString: path)),
                     size: sqlite3_column_int64(statement, 1),
@@ -183,7 +185,8 @@ public enum FileIndex {
                     changed: changed,
                     duplicate: sqlite3_column_int(statement, 4) != 0,
                     hash: hash,
-                    downloadSource: downloadSource
+                    downloadSource: downloadSource,
+                    lastOpened: lastOpened
                 ))
             }
             result = sqlite3_step(statement)
@@ -202,6 +205,7 @@ public enum FileIndex {
             return old.size != item.size || old.modified != item.modified
                 || old.changed != item.changed || old.duplicate != item.duplicate
                 || old.hash != item.hash || old.downloadSource != item.downloadSource
+                || old.lastOpened != item.lastOpened
         }
         if previous != nil && removed.isEmpty && changed.isEmpty {
             return !token.isCancelled
@@ -233,48 +237,58 @@ public enum FileIndex {
         }
 
         var insertStatement: OpaquePointer?
-        let sql = """
-            INSERT OR REPLACE INTO files (root, path, size, modified, changed, duplicate, hash, download_source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """
-        guard sqlite3_prepare_v2(database, sql, -1, &insertStatement, nil) == SQLITE_OK else { return false }
+        guard sqlite3_prepare_v2(database, insertFileSQL, -1, &insertStatement, nil) == SQLITE_OK else { return false }
         defer { sqlite3_finalize(insertStatement) }
 
         for item in changed {
             if token.isCancelled { return false }
-            sqlite3_reset(insertStatement)
-            sqlite3_clear_bindings(insertStatement)
-            sqlite3_bind_text(insertStatement, 1, root.path, -1, transient)
-            sqlite3_bind_text(insertStatement, 2, item.url.path, -1, transient)
-            sqlite3_bind_int64(insertStatement, 3, item.size)
-            sqlite3_bind_double(insertStatement, 4, item.modified.timeIntervalSince1970)
-            if let changed = item.changed {
-                sqlite3_bind_double(insertStatement, 5, changed.timeIntervalSince1970)
-            } else {
-                sqlite3_bind_null(insertStatement, 5)
-            }
-            sqlite3_bind_int(insertStatement, 6, item.duplicate ? 1 : 0)
-            if let hash = item.hash {
-                let bound = hash.withUnsafeBytes { bytes in
-                    sqlite3_bind_blob(insertStatement, 7, bytes.baseAddress,
-                                      Int32(bytes.count), transient)
-                }
-                guard bound == SQLITE_OK else { return false }
-            } else {
-                sqlite3_bind_null(insertStatement, 7)
-            }
-            if let source = item.downloadSource {
-                sqlite3_bind_text(insertStatement, 8, source, -1, transient)
-            } else {
-                sqlite3_bind_null(insertStatement, 8)
-            }
-            guard sqlite3_step(insertStatement) == SQLITE_DONE else { return false }
+            guard insertFile(item, root: root, using: insertStatement) else { return false }
         }
 
         guard !token.isCancelled,
               sqlite3_exec(database, "COMMIT", nil, nil, nil) == SQLITE_OK else { return false }
         committed = true
         return true
+    }
+
+    private static let insertFileSQL = """
+        INSERT OR REPLACE INTO files (root, path, size, modified, changed, duplicate, hash, download_source, last_opened)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+
+    /// Writes one row with a statement prepared from `insertFileSQL`.
+    private static func insertFile(_ item: FileItem, root: URL, using statement: OpaquePointer?) -> Bool {
+        sqlite3_reset(statement)
+        sqlite3_clear_bindings(statement)
+        sqlite3_bind_text(statement, 1, root.path, -1, transient)
+        sqlite3_bind_text(statement, 2, item.url.path, -1, transient)
+        sqlite3_bind_int64(statement, 3, item.size)
+        sqlite3_bind_double(statement, 4, item.modified.timeIntervalSince1970)
+        bindDate(item.changed, at: 5, in: statement)
+        sqlite3_bind_int(statement, 6, item.duplicate ? 1 : 0)
+        if let hash = item.hash {
+            let bound = hash.withUnsafeBytes { bytes in
+                sqlite3_bind_blob(statement, 7, bytes.baseAddress, Int32(bytes.count), transient)
+            }
+            guard bound == SQLITE_OK else { return false }
+        } else {
+            sqlite3_bind_null(statement, 7)
+        }
+        if let source = item.downloadSource {
+            sqlite3_bind_text(statement, 8, source, -1, transient)
+        } else {
+            sqlite3_bind_null(statement, 8)
+        }
+        bindDate(item.lastOpened, at: 9, in: statement)
+        return sqlite3_step(statement) == SQLITE_DONE
+    }
+
+    private static func bindDate(_ date: Date?, at index: Int32, in statement: OpaquePointer?) {
+        if let date {
+            sqlite3_bind_double(statement, index, date.timeIntervalSince1970)
+        } else {
+            sqlite3_bind_null(statement, index)
+        }
     }
 
     /// Quickly removes specific paths from both the files table and FTS search index.
@@ -318,11 +332,7 @@ public enum FileIndex {
         defer { if !committed { sqlite3_exec(database, "ROLLBACK", nil, nil, nil) } }
 
         var insertStmt: OpaquePointer?
-        let sql = """
-            INSERT OR REPLACE INTO files (root, path, size, modified, changed, duplicate, hash, download_source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """
-        guard sqlite3_prepare_v2(database, sql, -1, &insertStmt, nil) == SQLITE_OK else { return }
+        guard sqlite3_prepare_v2(database, insertFileSQL, -1, &insertStmt, nil) == SQLITE_OK else { return }
         defer { sqlite3_finalize(insertStmt) }
 
         var ftsStmt: OpaquePointer?
@@ -331,32 +341,7 @@ public enum FileIndex {
         defer { sqlite3_finalize(ftsStmt) }
 
         for item in items {
-            sqlite3_reset(insertStmt)
-            sqlite3_clear_bindings(insertStmt)
-            sqlite3_bind_text(insertStmt, 1, root.path, -1, transient)
-            sqlite3_bind_text(insertStmt, 2, item.url.path, -1, transient)
-            sqlite3_bind_int64(insertStmt, 3, item.size)
-            sqlite3_bind_double(insertStmt, 4, item.modified.timeIntervalSince1970)
-            if let changed = item.changed {
-                sqlite3_bind_double(insertStmt, 5, changed.timeIntervalSince1970)
-            } else {
-                sqlite3_bind_null(insertStmt, 5)
-            }
-            sqlite3_bind_int(insertStmt, 6, item.duplicate ? 1 : 0)
-            if let hash = item.hash {
-                let bound = hash.withUnsafeBytes { bytes in
-                    sqlite3_bind_blob(insertStmt, 7, bytes.baseAddress, Int32(bytes.count), transient)
-                }
-                guard bound == SQLITE_OK else { return }
-            } else {
-                sqlite3_bind_null(insertStmt, 7)
-            }
-            if let src = item.downloadSource {
-                sqlite3_bind_text(insertStmt, 8, src, -1, transient)
-            } else {
-                sqlite3_bind_null(insertStmt, 8)
-            }
-            guard sqlite3_step(insertStmt) == SQLITE_DONE else { return }
+            guard insertFile(item, root: root, using: insertStmt) else { return }
 
             sqlite3_reset(ftsStmt)
             sqlite3_clear_bindings(ftsStmt)
