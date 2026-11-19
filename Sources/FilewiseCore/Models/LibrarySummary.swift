@@ -25,6 +25,7 @@ public struct LibrarySummary: Sendable {
             if item.isScreenshot { totals["Screenshots", default: LibrarySummary()].add(item) }
             if item.isOldScreenshot { totals["Old Screenshots", default: LibrarySummary()].add(item) }
             if item.isDownload { totals["Downloads", default: LibrarySummary()].add(item) }
+            if item.isDownloaded { totals["Downloaded From", default: LibrarySummary()].add(item) }
             if item.isForgottenDownload { totals["Forgotten Downloads", default: LibrarySummary()].add(item) }
             if item.isLarge { totals["Large Files", default: LibrarySummary()].add(item) }
             if item.duplicate { totals["Duplicates", default: LibrarySummary()].add(item) }

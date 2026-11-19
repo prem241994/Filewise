@@ -205,9 +205,7 @@ struct FileNameCell: View {
 
     var body: some View {
         HStack(spacing: Theme.Spacing.s) {
-            Image(nsImage: IconCache.shared.icon(for: item))
-                .resizable()
-                .frame(width: 24, height: 24)
+            FileThumbnail(item: item, size: 32, fill: true)
             VStack(alignment: .leading, spacing: 1) {
                 Text(item.name).lineLimit(1).truncationMode(.middle)
                 Text(location)

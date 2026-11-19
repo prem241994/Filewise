@@ -8,15 +8,13 @@ struct DetailInspectorView: View {
     let otherCopies: [(item: FileItem, location: String)]
     let onQuickLook: () -> Void
     let onTrash: () -> Void
+    var autoplay = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                 VStack(spacing: Theme.Spacing.s) {
-                    Image(nsImage: IconCache.shared.icon(for: item))
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 64, height: 64)
+                    InspectorPreview(item: item, autoplay: autoplay)
                     Text(item.name)
                         .font(.headline)
                         .multilineTextAlignment(.center)

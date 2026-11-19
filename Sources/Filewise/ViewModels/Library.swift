@@ -39,7 +39,13 @@ final class Library: ObservableObject {
     @Published private(set) var visible: [FileItem] = []
     @Published private(set) var summaries: [String: LibrarySummary] = [:]
     @Published private(set) var downloadSources: [String: LibrarySummary] = [:]
-    @Published var selectedIDs = Set<String>()
+    @Published var selectedIDs = Set<String>() {
+        didSet {
+            if let id = playRequestID, !selectedIDs.contains(id) { playRequestID = nil }
+        }
+    }
+    /// A video the user asked to play; the inspector starts it automatically.
+    @Published private(set) var playRequestID: String?
     @Published var sortOrder = FileSearch.defaultSortOrder {
         didSet {
             if sortOrder != oldValue {
@@ -188,6 +194,12 @@ final class Library: ObservableObject {
 
     func deselectAll() {
         selectedIDs.removeAll()
+    }
+
+    /// Selects a video and asks the inspector to start playing it.
+    func play(_ item: FileItem) {
+        selectedIDs = [item.id]
+        playRequestID = item.id
     }
 
     /// Selects every copy except the oldest file in each group of identical files.

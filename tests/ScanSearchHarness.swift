@@ -172,6 +172,11 @@ struct ScanSearchHarness {
         try require(weekly.cleanupReasons == [.duplicate], "duplicate reason missing")
         try require(library.files.first { $0.name == "holiday.mov" }?.cleanupReasons == [.large], "large reason missing")
 
+        library.category = "Downloaded From"
+        try require(waitUntil { library.visible.count == library.summary(for: "Downloaded From").count
+                                    && !library.visible.isEmpty },
+                    "By Source count did not match its file list")
+
         library.category = "Documents"
         try require(waitUntil { !library.visible.isEmpty }, "Documents category was empty")
         library.toggleSelection(for: library.visible[0])

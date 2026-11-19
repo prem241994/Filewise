@@ -88,6 +88,12 @@ Phase 2 — Local scanning, search, and dashboard
 - Adopted the Swift 6 language mode with complete data-race checking: the view model, navigation state, and icon cache run on the main actor; background work uses tasks with Sendable values; cancellation tokens use a system lock
 - Shared build settings in `scripts/common.sh`; all checks pass, and the 10,000-file benchmark is unchanged when old and new builds run back to back (0.37 s initial scan and refresh)
 
+- Moved ⌘F (Search Files) and ⌘Z (restore the last Trash batch, or undo typing in the search field) into menu commands, and focus the toolbar search field directly; both were previously swallowed by the standard Edit menu
+- Added Quick Look thumbnails for photos, videos, and documents in lists, Home, and the inspector; a gallery grid for Images, Videos, and Screenshots with a List/Grid switch per view; and a Recent Photos & Videos strip on Home
+- The inspector plays videos (▶ on a tile starts playback) and shows scrollable document previews, all through on-device Quick Look
+- Redesigned the Home Library and Clean Up cards with preview stacks, size-share bars, and hover feedback
+- "By Source" now counts the same files its page lists
+
 ## Current limitations
 
 - If the database itself is unreadable, automated salvage is not yet implemented; the original database is left intact for manual recovery

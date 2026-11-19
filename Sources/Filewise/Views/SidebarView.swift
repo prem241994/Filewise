@@ -42,7 +42,7 @@ struct SidebarView: View {
                 row("Screenshots", count: library.summary(for: "Screenshots").count)
                 row("Downloads", count: library.summary(for: "Downloads").count)
                 row("Downloaded From", title: "By Source",
-                    count: library.downloadSources.values.reduce(0) { $0 + $1.count })
+                    count: library.summary(for: "Downloaded From").count)
             }
             Section("Locations") {
                 ForEach(locations, id: \.url) { location in

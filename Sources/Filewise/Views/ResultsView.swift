@@ -1,11 +1,24 @@
+import AppKit
 import FilewiseCore
 import SwiftUI
 
 struct ResultsView: View {
     @ObservedObject var library: Library
+    @EnvironmentObject private var navigation: FilewiseNavigation
     var isResultsFocused: FocusState<Bool>.Binding
     let onPreview: (FileItem) -> Void
     let onTrash: ([FileItem]) -> Void
+    /// Views shown as a gallery, stored as comma-separated view names.
+    @AppStorage("filewise.gridViews") private var gridViews = "Images,Videos,Screenshots"
+
+    private var layoutKey: String { library.query.isEmpty ? library.category : "Search" }
+    private var showsGrid: Bool { gridViews.split(separator: ",").contains { $0 == layoutKey } }
+
+    private func setGrid(_ grid: Bool) {
+        var views = Set(gridViews.split(separator: ",").map(String.init))
+        if grid { views.insert(layoutKey) } else { views.remove(layoutKey) }
+        gridViews = views.sorted().joined(separator: ",")
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -25,6 +38,8 @@ struct ResultsView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if showsGrid {
+                gallery
             } else {
                 table
             }
@@ -47,6 +62,16 @@ struct ResultsView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            if !library.visible.isEmpty {
+                Picker("View", selection: Binding(get: { showsGrid }, set: { setGrid($0) })) {
+                    Image(systemName: "list.bullet").accessibilityLabel("List").tag(false)
+                    Image(systemName: "square.grid.2x2").accessibilityLabel("Grid").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .help("Show as a list or as a grid of previews")
+            }
             if library.category == "Duplicates" && library.query.isEmpty && !library.visible.isEmpty {
                 Button { library.selectDuplicateCopies() } label: {
                     Label("Select Extra Copies", systemImage: "checklist")
@@ -86,6 +111,94 @@ struct ResultsView: View {
             if !selected.isEmpty { onTrash(selected) }
         }
         .accessibilityLabel("Files")
+    }
+
+    // MARK: - Gallery
+
+    private var gallery: some View {
+        GeometryReader { geometry in
+            let side: CGFloat = 150
+            let spacing = Theme.Spacing.l
+            let columns = max(1, Int((geometry.size.width - 2 * Theme.Spacing.page + spacing) / (side + 6 + spacing)))
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVGrid(columns: Array(repeating: GridItem(.fixed(side + 6), spacing: spacing), count: columns),
+                              alignment: .leading, spacing: spacing) {
+                        ForEach(library.visible) { item in
+                            MediaTile(item: item, side: side, isSelected: library.selectedIDs.contains(item.id),
+                                      onPlay: { play(item) })
+                                .id(item.id)
+                                .onTapGesture(count: 2) { FileActions.open([item]) }
+                                .onTapGesture { select(item) }
+                                .contextMenu {
+                                    FileMenuItems(items: contextItems(for: item), onPreview: onPreview, onTrash: onTrash)
+                                }
+                                .accessibilityAction { select(item) }
+                        }
+                    }
+                    .padding(.horizontal, Theme.Spacing.page)
+                    .padding(.bottom, Theme.Spacing.xl)
+                }
+                .focusable()
+                .focusEffectDisabled()
+                .focused(isResultsFocused)
+                .onKeyPress(keys: [.leftArrow, .rightArrow, .upArrow, .downArrow]) { press in
+                    moveSelection(press.key, columns: columns)
+                }
+                .onKeyPress(.return) {
+                    guard !library.selectedIDs.isEmpty else { return .ignored }
+                    FileActions.open(library.selectedFiles)
+                    return .handled
+                }
+                .onDeleteCommand {
+                    let selected = library.selectedFiles
+                    if !selected.isEmpty { onTrash(selected) }
+                }
+                .onChange(of: library.selectedIDs) { _, ids in
+                    if ids.count == 1, let id = ids.first {
+                        withAnimation(.easeInOut(duration: 0.15)) { proxy.scrollTo(id) }
+                    }
+                }
+                .accessibilityLabel("Files")
+            }
+        }
+    }
+
+    private func play(_ item: FileItem) {
+        isResultsFocused.wrappedValue = true
+        navigation.showInspector = true
+        library.play(item)
+    }
+
+    /// Click selects one file; ⌘-click adds or removes it.
+    private func select(_ item: FileItem) {
+        isResultsFocused.wrappedValue = true
+        if NSEvent.modifierFlags.contains(.command) {
+            library.toggleSelection(for: item)
+        } else {
+            library.selectedIDs = [item.id]
+        }
+    }
+
+    /// A context menu acts on the whole selection when the clicked file is in it.
+    private func contextItems(for item: FileItem) -> [FileItem] {
+        library.selectedIDs.contains(item.id) && library.selectedIDs.count > 1 ? library.selectedFiles : [item]
+    }
+
+    private func moveSelection(_ key: KeyEquivalent, columns: Int) -> KeyPress.Result {
+        let items = library.visible
+        guard !items.isEmpty else { return .ignored }
+        let delta = switch key {
+        case .leftArrow: -1
+        case .rightArrow: 1
+        case .upArrow: -columns
+        default: columns
+        }
+        let current = library.selectedIDs.count == 1 ? items.firstIndex { library.selectedIDs.contains($0.id) } : nil
+        let index = current.map { max(0, min(items.count - 1, $0 + delta)) } ?? 0
+        library.selectedIDs = [items[index].id]
+        if library.previewURL != nil { library.previewURL = items[index].url }
+        return .handled
     }
 
     private func items(_ ids: Set<String>) -> [FileItem] {

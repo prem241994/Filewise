@@ -57,6 +57,9 @@ public struct FileItem: Identifiable, Sendable {
     }
 
     public var isDownload: Bool { url.pathComponents.contains("Downloads") }
+    /// Shown in "By Source": files with a known download origin, plus anything
+    /// in a Downloads folder.
+    public var isDownloaded: Bool { downloadSource != nil || isDownload }
     public var isLarge: Bool { size >= 100_000_000 }
     public var isOldScreenshot: Bool {
         isScreenshot && modified < (Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date())

@@ -111,19 +111,6 @@ struct ContentView: View {
             }
             return .ignored
         }
-        .onKeyPress { press in
-            guard press.modifiers.contains(.command) else { return .ignored }
-            switch press.characters.lowercased() {
-            case "z" where library.canUndoTrash && !isSearchFocused:
-                library.undoLastTrash()
-                return .handled
-            case "f":
-                isSearchFocused = true
-                return .handled
-            default:
-                return .ignored
-            }
-        }
     }
 
     // MARK: - Detail
@@ -184,7 +171,7 @@ struct ContentView: View {
     private var searchField: some View {
         HStack(spacing: Theme.Spacing.xs) {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-            TextField("Search files, or try “pdfs from last week”", text: $library.query)
+            TextField(Self.searchPrompt, text: $library.query)
                 .textFieldStyle(.plain)
                 .focused($isSearchFocused)
                 .accessibilityLabel("Search files")
@@ -296,7 +283,8 @@ struct ContentView: View {
                 location: library.displayLocation(for: item),
                 otherCopies: library.otherCopies(of: item).map { ($0, library.displayLocation(for: $0)) },
                 onQuickLook: { preview(item) },
-                onTrash: { requestTrash([item]) }
+                onTrash: { requestTrash([item]) },
+                autoplay: library.playRequestID == item.id
             )
         } else if selected.count > 1 {
             MultiSelectionInspectorView(items: selected) { requestTrash(selected) }
@@ -346,11 +334,31 @@ struct ContentView: View {
         if library.previewURL != nil { library.previewURL = items[index].url }
     }
 
+    private static let searchPrompt = "Search files, or try “pdfs from last week”"
+
     private func focusRequestedSearch() {
         guard navigation.searchRequested else { return }
         DispatchQueue.main.async {
             isSearchFocused = true
+            // @FocusState does not reliably reach a text field in the window
+            // toolbar, so also make the field first responder directly.
+            let window = NSApp.keyWindow ?? NSApp.windows.first { $0.isVisible && $0.canBecomeKey }
+            if let window, let field = Self.searchField(in: window.contentView?.superview) {
+                window.makeFirstResponder(field)
+            }
             navigation.searchRequested = false
         }
+    }
+
+    /// Finds the toolbar search field, which lives outside the content view.
+    private static func searchField(in view: NSView?) -> NSTextField? {
+        guard let view else { return nil }
+        if let field = view as? NSTextField, field.isEditable, field.placeholderString == searchPrompt {
+            return field
+        }
+        for subview in view.subviews {
+            if let field = searchField(in: subview) { return field }
+        }
+        return nil
     }
 }

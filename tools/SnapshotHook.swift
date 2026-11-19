@@ -13,7 +13,7 @@ enum SnapshotHook {
         let env = ProcessInfo.processInfo.environment
         guard let output = env["FILEWISE_SNAPSHOT_DIR"], let folder = env["FILEWISE_SNAPSHOT_FOLDER"] else { return }
         let appearance = env["FILEWISE_SNAPSHOT_APPEARANCE"] ?? "light"
-        // Each step is name:category[:query][:select]
+        // Each step is name:category[:query][:select|play|scroll]
         let steps = (env["FILEWISE_SNAPSHOT_STEPS"] ?? "home:Home").split(separator: ",").map(String.init)
         Task {
             try? await Task.sleep(for: .seconds(1))
@@ -35,12 +35,29 @@ enum SnapshotHook {
             library.category = parts.count > 1 ? parts[1] : "Home"
             library.query = parts.count > 2 ? parts[2] : ""
             try? await Task.sleep(for: .milliseconds(800))
-            if parts.count > 3, parts[3] == "select", let first = library.visible.first ?? library.files.first {
-                library.selectedIDs = [first.id]
+            if parts.count > 3, let first = library.visible.first ?? library.files.first {
+                switch parts[3] {
+                case "play": library.play(first)
+                case "scroll": scrollDown()
+                default: library.selectedIDs = [first.id]
+                }
             }
             try? await Task.sleep(for: .milliseconds(1200))
             capture(to: output.appendingPathComponent("\(parts[0])-\(appearance).png"))
         }
+    }
+
+    /// Scrolls the largest scroll view (the page) down by most of its height.
+    private static func scrollDown() {
+        func scrollViews(in view: NSView) -> [NSScrollView] {
+            (view as? NSScrollView).map { [$0] } ?? [] + view.subviews.flatMap(scrollViews)
+        }
+        guard let content = NSApp.windows.first(where: { $0.isVisible && $0.frame.width > 500 })?.contentView,
+              let page = scrollViews(in: content).max(by: { $0.frame.height * $0.frame.width < $1.frame.height * $1.frame.width })
+        else { return }
+        let clip = page.contentView
+        clip.scroll(to: NSPoint(x: 0, y: clip.bounds.origin.y + clip.bounds.height * 0.75))
+        page.reflectScrolledClipView(clip)
     }
 
     private typealias WindowImage = @convention(c) (CGRect, UInt32, UInt32, UInt32) -> Unmanaged<CGImage>?

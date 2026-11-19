@@ -66,7 +66,7 @@ public enum FileSearch {
         case "Old Screenshots": item.isOldScreenshot
         case "Forgotten Downloads": item.isForgottenDownload
         case "Downloads": item.isDownload
-        case "Downloaded From": item.downloadSource != nil || item.isDownload
+        case "Downloaded From": item.isDownloaded
         case "Large Files": item.isLarge
         case "Clean Up": item.isCleanupCandidate
         default:
