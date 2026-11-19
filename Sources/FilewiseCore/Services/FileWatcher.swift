@@ -7,11 +7,13 @@ public final class FileWatcher {
     private var stream: FSEventStreamRef?
     private let onChange: @MainActor () -> Void
     private let rootPrefixes: [String]
+    private let ignoredPrefixes: [String]
     private let indexPath = FileIndex.databaseDirectory.path
 
-    public init?(root: URL, onChange: @escaping @MainActor () -> Void) {
+    public init?(root: URL, ignoring ignoredPaths: Set<String> = [], onChange: @escaping @MainActor () -> Void) {
         self.onChange = onChange
         self.rootPrefixes = PathPrefixes.forFolder(root)
+        self.ignoredPrefixes = ignoredPaths.map { $0.hasSuffix("/") ? $0 : $0 + "/" }
         var context = FSEventStreamContext(
             version: 0,
             info: Unmanaged.passUnretained(self).toOpaque(),
@@ -50,6 +52,7 @@ public final class FileWatcher {
     /// Without this, background writes under a home folder trigger endless rescans.
     private func isRelevant(_ path: String) -> Bool {
         if path.hasPrefix(indexPath) { return false }
+        if ignoredPrefixes.contains(where: { path.hasPrefix($0) }) { return false }
         guard let prefix = rootPrefixes.first(where: { path.hasPrefix($0) }) else { return true }
         let components = path.dropFirst(prefix.count).split(separator: "/")
         var current = URL(fileURLWithPath: String(prefix.dropLast()), isDirectory: true)

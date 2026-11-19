@@ -276,6 +276,35 @@ struct ScanSearchHarness {
         library.scan(usageRoot)
         try require(waitUntil { !library.scanning && library.files.first { $0.name == "untouched.zip" }?.isForgottenDownload == false },
                     "a newly opened download stayed suggested after rescanning")
+
+        // Settings: limits apply without rescanning; ignored folders need one.
+        defer { CleanupSettings.current = CleanupSettings() }
+        CleanupSettings.current = CleanupSettings(largeFileBytes: 10)
+        library.applySettings(rescan: false)
+        try require(library.summary(for: "Large Files").count == 2, "a lower large-file limit was not applied")
+        try require(CleanupReason.large.explanation.contains("10 bytes"), "the large-file explanation ignored the setting")
+        CleanupSettings.current = CleanupSettings(oldAfterDays: 3)
+        library.applySettings(rescan: false)
+        try require(library.files.first { $0.name == "opened-last-week.zip" }?.isForgottenDownload == true,
+                    "a shorter age for old downloads was not applied")
+        try require(library.summary(for: "Large Files").count == 0, "the default large-file limit was not restored")
+
+        let privateFolder = usageRoot.appendingPathComponent("Private", isDirectory: true)
+        try FileManager.default.createDirectory(at: privateFolder, withIntermediateDirectories: true)
+        try Data("secret".utf8).write(to: privateFolder.appendingPathComponent("secret.txt"))
+        library.scan(usageRoot)
+        try require(waitUntil { !library.scanning && library.files.contains { $0.name == "secret.txt" } },
+                    "the folder to ignore was not scanned first")
+        CleanupSettings.current = CleanupSettings(ignoredFolders: [privateFolder.path])
+        library.applySettings(rescan: true)
+        try require(waitUntil { !library.scanning && !library.files.contains { $0.name == "secret.txt" } && library.files.count == 2 },
+                    "an ignored folder was still scanned")
+        try require(FileIndex.load(root: usageRoot)?.contains { $0.name == "secret.txt" } == false,
+                    "an ignored folder stayed in the saved index")
+        CleanupSettings.current = CleanupSettings()
+        library.applySettings(rescan: true)
+        try require(waitUntil { !library.scanning && library.files.contains { $0.name == "secret.txt" } },
+                    "a folder was still skipped after it stopped being ignored")
     }
 
     /// Writes the attribute macOS records when a file is opened.

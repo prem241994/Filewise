@@ -13,7 +13,7 @@ enum SnapshotHook {
         let env = ProcessInfo.processInfo.environment
         guard let output = env["FILEWISE_SNAPSHOT_DIR"], let folder = env["FILEWISE_SNAPSHOT_FOLDER"] else { return }
         let appearance = env["FILEWISE_SNAPSHOT_APPEARANCE"] ?? "light"
-        // Each step is name:category[:query][:select|play|scroll]
+        // Each step is name:category[:query][:select|play|scroll]; category "Settings" captures the Settings window
         let steps = (env["FILEWISE_SNAPSHOT_STEPS"] ?? "home:Home").split(separator: ",").map(String.init)
         Task {
             try? await Task.sleep(for: .seconds(1))
@@ -31,6 +31,19 @@ enum SnapshotHook {
             }
             guard let library else { return }
             let parts = step.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+            if parts.count > 1, parts[1] == "Settings" {
+                // ⌘, through the app menu, as a user would open it.
+                let comma = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+                                             windowNumber: 0, context: nil, characters: ",",
+                                             charactersIgnoringModifiers: ",", isARepeat: false, keyCode: 43)
+                if let comma { _ = NSApp.mainMenu?.performKeyEquivalent(with: comma) }
+                try? await Task.sleep(for: .milliseconds(1500))
+                let settings = NSApp.windows.first { $0.isVisible && $0.identifier?.rawValue.localizedCaseInsensitiveContains("settings") == true }
+                    ?? NSApp.windows.first { $0.isVisible && $0.title.localizedCaseInsensitiveContains("settings") }
+                capture(to: output.appendingPathComponent("\(parts[0])-\(appearance).png"), window: settings)
+                settings?.close()
+                continue
+            }
             library.query = ""
             library.category = parts.count > 1 ? parts[1] : "Home"
             library.query = parts.count > 2 ? parts[2] : ""
@@ -65,8 +78,8 @@ enum SnapshotHook {
     /// Uses the window server so materials and vibrancy render as on screen.
     /// An app may capture its own windows without Screen Recording permission.
     /// The API is unavailable to the current SDK, so it is resolved at runtime.
-    private static func capture(to url: URL) {
-        guard let window = NSApp.windows.filter({ $0.isVisible && $0.contentView != nil })
+    private static func capture(to url: URL, window chosen: NSWindow? = nil) {
+        guard let window = chosen ?? NSApp.windows.filter({ $0.isVisible && $0.contentView != nil })
                 .max(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }) else { return }
         var image: CGImage?
         if let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CGWindowListCreateImage") {

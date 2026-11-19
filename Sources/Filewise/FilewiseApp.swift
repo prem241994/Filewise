@@ -5,6 +5,7 @@ import SwiftUI
 @main
 struct FilewiseApp: App {
     @StateObject private var navigation = FilewiseNavigation()
+    @StateObject private var settings = AppSettings()
 
     init() {
         #if FILEWISE_SNAPSHOT
@@ -14,12 +15,17 @@ struct FilewiseApp: App {
 
     var body: some Scene {
         Window("Filewise", id: "main") {
-            ContentView().environmentObject(navigation)
+            ContentView()
+                .environmentObject(navigation)
+                .environmentObject(settings)
         }
         .defaultSize(width: 1200, height: 780)
         .commands {
             SidebarCommands()
             FilewiseCommands(navigation: navigation)
+        }
+        Settings {
+            SettingsView().environmentObject(settings)
         }
         MenuBarExtra("Filewise", systemImage: "folder.badge.magnifyingglass") {
             FilewiseMenu().environmentObject(navigation)

@@ -95,6 +95,7 @@ Phase 2 — Local scanning, search, and dashboard
 - "By Source" now counts the same files its page lists
 - "Select Extra Copies" offers keep rules: oldest, newest, shortest name, or the copy in a chosen folder (remembered; covered by `scripts/test-duplicates.sh`)
 - Old downloads now use the later of the modification date and the last-opened date macOS records on each file (`com.apple.lastuseddate#PS`); the inspector shows Last Opened. This adds about 0.05 s per 10,000 files to a scan
+- Added a Settings window (⌘,): large-file size, the age after which screenshots and downloads are old, and ignored folders that scans and the folder watcher skip. Limits apply immediately; changing ignored folders rescans
 
 ## Current limitations
 

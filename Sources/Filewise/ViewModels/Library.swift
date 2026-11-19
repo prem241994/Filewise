@@ -358,6 +358,20 @@ final class Library: ObservableObject {
         UserDefaults.standard.set(scopedData != nil, forKey: Self.bookmarkHasSecurityScopeKey)
     }
 
+    // MARK: - Settings
+
+    /// Applies changed cleanup settings: limits only need the counts and
+    /// views recalculated, while ignored folders need a rescan.
+    func applySettings(rescan: Bool) {
+        if rescan, let folder {
+            // A new watcher picks up the ignored folders.
+            stopWatching()
+            scan(folder)
+        } else {
+            updateFiles(files)
+        }
+    }
+
     // MARK: - Index maintenance
 
     func rebuildIndex() {
@@ -418,7 +432,7 @@ final class Library: ObservableObject {
             updateFiles([])
         }
         if watcher == nil {
-            watcher = FileWatcher(root: url) { [weak self] in
+            watcher = FileWatcher(root: url, ignoring: CleanupSettings.current.ignoredPaths) { [weak self] in
                 self?.scheduleRescan(for: url)
             }
         }
@@ -461,8 +475,9 @@ final class Library: ObservableObject {
         }
         guard !token.isCancelled else { return }
 
+        let ignored = CleanupSettings.current.ignoredPaths
         let outcome = await Self.background {
-            FolderScanner.scan(url, previous: cached, token: token) { count in
+            FolderScanner.scan(url, previous: cached, token: token, ignoredPaths: ignored) { count in
                 Task { @MainActor in
                     guard self.activeScan === token else { return }
                     self.scannedCount = count

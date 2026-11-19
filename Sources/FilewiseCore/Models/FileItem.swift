@@ -63,14 +63,14 @@ public struct FileItem: Identifiable, Sendable {
     /// Shown in "By Source": files with a known download origin, plus anything
     /// in a Downloads folder.
     public var isDownloaded: Bool { downloadSource != nil || isDownload }
-    public var isLarge: Bool { size >= 100_000_000 }
+    public var isLarge: Bool { size >= CleanupSettings.current.largeFileBytes }
     public var isOldScreenshot: Bool {
-        isScreenshot && modified < (Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date())
+        isScreenshot && modified < CleanupSettings.current.oldCutoff()
     }
     /// The later of the last modification and the last time it was opened.
     public var lastUsed: Date { max(modified, lastOpened ?? .distantPast) }
     public var isForgottenDownload: Bool {
-        kind != "app" && isDownload && lastUsed < (Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date())
+        kind != "app" && isDownload && lastUsed < CleanupSettings.current.oldCutoff()
     }
 
     /// Why this file is a cleanup candidate, in display order.
@@ -102,9 +102,12 @@ public enum CleanupReason: CaseIterable, Sendable {
     public var explanation: String {
         switch self {
         case .duplicate: "Another file in this folder has identical contents."
-        case .large: "Larger than 100 MB."
-        case .oldScreenshot: "A screenshot last modified more than 30 days ago."
-        case .forgottenDownload: "In Downloads and not opened or modified for more than 30 days."
+        case .large:
+            "Larger than \(ByteCountFormatter.string(fromByteCount: CleanupSettings.current.largeFileBytes, countStyle: .file))."
+        case .oldScreenshot:
+            "A screenshot last modified more than \(CleanupSettings.current.oldAfterDays) days ago."
+        case .forgottenDownload:
+            "In Downloads and not opened or modified for more than \(CleanupSettings.current.oldAfterDays) days."
         }
     }
 

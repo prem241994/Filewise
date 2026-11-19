@@ -5,6 +5,7 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var navigation: FilewiseNavigation
+    @EnvironmentObject private var settings: AppSettings
     @StateObject private var library = Library()
     @State private var pendingTrash: [FileItem] = []
     @State private var showTrashConfirmation = false
@@ -68,6 +69,9 @@ struct ContentView: View {
         .onChange(of: navigation.searchRequested) { _, requested in
             if requested { focusRequestedSearch() }
         }
+        .onChange(of: settings.largeFileBytes) { library.applySettings(rescan: false) }
+        .onChange(of: settings.oldAfterDays) { library.applySettings(rescan: false) }
+        .onChange(of: settings.ignoredFolders) { library.applySettings(rescan: true) }
         .quickLookPreview($library.previewURL)
         .sheet(isPresented: $library.isTrashing) {
             TrashProgressDialog(library: library)

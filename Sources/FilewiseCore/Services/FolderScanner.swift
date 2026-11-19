@@ -19,8 +19,10 @@ public enum FolderScanner {
     /// - Parameters:
     ///   - previous: The saved index for this folder. Hashes and download
     ///     sources are reused for files whose size and change dates match.
+    ///   - ignoredPaths: Folders to skip with everything inside them.
     ///   - progress: Called with the running file count every 250 files.
     public static func scan(_ url: URL, previous: [FileItem], token: ScanToken,
+                            ignoredPaths: Set<String> = [],
                             progress: (Int) -> Void) -> FolderScanOutcome {
         let access = url.startAccessingSecurityScopedResource()
         defer { if access { url.stopAccessingSecurityScopedResource() } }
@@ -43,6 +45,10 @@ public enum FolderScanner {
         while !token.isCancelled, let file = enumerator.nextObject() as? URL {
             guard let values = try? file.resourceValues(forKeys: Set(keys)) else {
                 scanFailed = true
+                continue
+            }
+            if values.isDirectory == true, ignoredPaths.contains(file.path) {
+                enumerator.skipDescendants()
                 continue
             }
             let isAppBundle = file.pathExtension.lowercased() == "app"
