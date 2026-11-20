@@ -85,6 +85,7 @@ struct PaywallView: View {
                 .accessibilityHidden(true)
             Text(title)
                 .font(.system(size: 20, weight: .bold))
+                .accessibilityAddTraits(.isHeader)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             Text(subtitle)

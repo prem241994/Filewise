@@ -67,7 +67,7 @@ struct WelcomeView: View {
     private var heroText: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
             HStack(spacing: 5) {
-                Image(systemName: "sparkles").foregroundStyle(.tint)
+                Image(systemName: "sparkles").foregroundStyle(.tint).accessibilityHidden(true)
                 Text("Welcome to Filewise").foregroundStyle(.primary.opacity(0.8))
             }
             .font(.system(size: 12, weight: .semibold))
@@ -76,6 +76,8 @@ struct WelcomeView: View {
             .background(Color.accentColor.opacity(colorScheme == .dark ? 0.22 : 0.12), in: Capsule())
             Text("Find any file.\nClear the clutter.")
                 .font(.system(size: 38, weight: .bold))
+                .accessibilityLabel("Find any file. Clear the clutter.")
+                .accessibilityAddTraits(.isHeader)
                 .kerning(-0.6)
                 .lineSpacing(-2)
                 .fixedSize(horizontal: false, vertical: true)
@@ -111,7 +113,7 @@ struct WelcomeView: View {
 
     private func assurance(_ text: String) -> some View {
         HStack(spacing: 4) {
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).accessibilityHidden(true)
             Text(text).foregroundStyle(.secondary)
         }
         .font(.caption)
@@ -149,7 +151,7 @@ struct WelcomeView: View {
                             in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(License.trialDays)-day free trial").font(.headline)
+                Text("\(License.trialDays)-day free trial").font(.headline).accessibilityAddTraits(.isHeader)
                 Text(store.trialTerms)
                     .font(.callout)
                     .foregroundStyle(.secondary)

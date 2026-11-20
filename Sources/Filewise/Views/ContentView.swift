@@ -82,7 +82,19 @@ struct ContentView: View {
             }
         }
         .onChange(of: store.status) { promptIfTrialEnded() }
-        .onChange(of: library.scanning) { promptIfTrialEnded() }
+        .onChange(of: library.scanning) { _, scanning in
+            promptIfTrialEnded()
+            // VoiceOver users hear when a scan ends, since the sidebar status changes silently.
+            if !scanning { announce(library.status) }
+        }
+        .onChange(of: library.bannerMessage) { _, message in
+            if let message { announce(message + (library.canUndoTrash ? " Undo is available." : "")) }
+        }
+        .onChange(of: library.trashIsCompleted) { _, completed in
+            if completed {
+                announce("Moved \(Theme.count(library.trashCurrentCount, "file")) to the Trash.")
+            }
+        }
         .onChange(of: navigation.searchRequested) { _, requested in
             if requested { focusRequestedSearch() }
         }
@@ -192,7 +204,7 @@ struct ContentView: View {
 
     private var searchField: some View {
         HStack(spacing: Theme.Spacing.xs) {
-            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary).accessibilityHidden(true)
             TextField(Self.searchPrompt, text: $library.query)
                 .textFieldStyle(.plain)
                 .focused($isSearchFocused)
@@ -249,7 +261,7 @@ struct ContentView: View {
 
     private func bannerView(_ message: String) -> some View {
         HStack(spacing: Theme.Spacing.m) {
-            Image(systemName: "info.circle.fill").foregroundStyle(.tint)
+            Image(systemName: "info.circle.fill").foregroundStyle(.tint).accessibilityHidden(true)
             Text(message).font(.callout)
             Spacer()
             if library.canUndoTrash {
@@ -320,6 +332,11 @@ struct ContentView: View {
 
     private func preview(_ item: FileItem) {
         library.previewURL = item.url
+    }
+
+    private func announce(_ message: String) {
+        guard !message.isEmpty else { return }
+        AccessibilityNotification.Announcement(message).post()
     }
 
     /// Shows the unlock sheet once when the trial has ended, after any scan,

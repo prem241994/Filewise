@@ -175,6 +175,7 @@ struct ReasonTags: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(reasons.map(\.label).joined(separator: ", "))
+        .accessibilityAddTraits(.isStaticText)
     }
 
     private func tags(_ shown: [CleanupReason], hidden: Int) -> some View {
@@ -217,5 +218,18 @@ struct FileNameCell: View {
         }
         .padding(.vertical, 2)
         .help(item.url.path)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+extension View {
+    /// Open, Quick Look, Show in Finder, and Move to Trash as VoiceOver actions,
+    /// since double-click and the context menu are hard to reach with it.
+    func fileAccessibilityActions(_ item: FileItem, onPreview: @escaping (FileItem) -> Void,
+                                  onTrash: @escaping ([FileItem]) -> Void) -> some View {
+        accessibilityAction(named: "Open") { FileActions.open([item]) }
+            .accessibilityAction(named: "Quick Look") { onPreview(item) }
+            .accessibilityAction(named: "Show in Finder") { FileActions.reveal([item]) }
+            .accessibilityAction(named: "Move to Trash") { onTrash([item]) }
     }
 }

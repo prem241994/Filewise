@@ -101,6 +101,7 @@ Phase 2 — Local scanning, search, and dashboard
 - Added the 7-day free trial and one-time unlock (StoreKit 2, no server): the trial starts at the App Store's original download date, Move to Trash and Select Extra Copies show an unlock sheet after it ends (naming the size being cleaned), and search, browsing, suggestions, and Undo stay free. When the trial has ended, the unlock sheet appears by itself once per launch, after the scan and naming the size of the suggestions; during the trial the sidebar shows the days left. Settings shows the status (with Restore Purchase), and Filewise → Unlock Filewise… opens the sheet. Covered by `scripts/test-license.sh`; a development-only override previews each state. Needs the `app.filewise.desktop.unlock` non-consumable in App Store Connect before real purchases can be tested
 - Made the trial follow App Review Guideline 3.1.1: it starts when the user taps Start Free Trial (a free non-consumable named "7-day Trial", `app.filewise.desktop.trial`), not silently at download, and the welcome page, sidebar, and unlock sheet show its length, what it gates, and the price first. Before the trial starts, cleanup actions offer it. Development builds outside the App Store keep the trial locally
 - Added the app icon: a friendly orange owl (the "wise" in Filewise) wearing round indigo glasses, with sparkles, on an indigo rounded square with the welcome page's pink and teal glows. Drawn in code (`tools/AppIcon.swift`, rendered by `scripts/make-icon.sh`) and checked as macOS 26 presents it (not placed in a gray plate) and at 64 px
+- VoiceOver pass: checked what VoiceOver reaches on the welcome page, Home, results list and gallery, unlock sheet, and Settings with a new snapshot `Accessibility` step that dumps the accessibility tree. Page and section titles are now headings, decorative icons are hidden, cleanup tags read as text, file tiles and rows offer Open, Quick Look, Show in Finder, and Move to Trash actions, and scan results, banners (with Undo), and finished Trash moves are announced. A spoken pass with VoiceOver by a person is still worthwhile
 
 ## Current limitations
 
@@ -112,7 +113,7 @@ Phase 2 — Local scanning, search, and dashboard
 - The menu bar provides Open Filewise and Search Files actions; a configurable global shortcut is not yet implemented
 - App bundle sizes sum regular files within the bundle; unreadable bundles show an unavailable size and are excluded from size-based suggestions
 - Cleanup cards show review candidates and their total size, not guaranteed recoverable space
-- A full spoken VoiceOver pass and visual focus-ring review still remain before release; keyboard behaviour of the new table (Space for Quick Look, Delete, Return) should be checked by hand
+- The VoiceOver tree has been checked in code; a spoken pass by a person and a visual focus-ring review remain before release
 - The local ZIP package is ad-hoc signed; Developer ID signing and notarization remain necessary for distribution
 - The build and test scripts use the active SDK by default; this Mac currently needs `FILEWISE_SDK_PATH` set to its compatible macOS 26 SDK because its active SDK and Swift compiler are mismatched
 - A GitHub Actions workflow is present locally for building and running the isolated index, search, and Trash safety checks; its first hosted run is pending a push

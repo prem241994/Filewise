@@ -44,6 +44,8 @@ Harnesses that touch the index must set `FILEWISE_TEST_DATABASE_DIRECTORY` to a 
 
 `./scripts/snapshot-ui.sh [output-dir] [steps]` builds a separate app copy with `-D FILEWISE_SNAPSHOT` and `tools/SnapshotHook.swift`. It runs that copy against a generated sample folder and writes light and dark PNGs to `.build/snapshots`. It uses an isolated index and the bundle ID `app.filewise.snapshot`. Steps are comma-separated `name:category[:query][:select|play|scroll]` entries, and the category `Settings` captures the Settings window. Use this to check UI changes visually. Code under `#if FILEWISE_SNAPSHOT` must never be needed by the shipping build.
 
+For **accessibility**, a step `name:Accessibility:<category>` writes `name-<appearance>.txt` instead of a PNG. It lists what VoiceOver can reach: role, spoken name, value, and actions, read through the AX API on the app itself, so no Accessibility permission is needed. Add `:ax` as the third field of a `Welcome`, `Paywall`, or `Settings` step for the same dump. Lines starting with `!` are unnamed buttons or images. The only acceptable ones are macOS's own scroll-bar arrows and window buttons. Conventions: decorative icons get `.accessibilityHidden(true)`, page and section titles get `.isHeader`, and file tiles and rows use `fileAccessibilityActions` (Open, Quick Look, Show in Finder, Move to Trash).
+
 ## Toolchain constraints
 
 - Both modules compile with `-swift-version 6` and complete data-race checking. The code must build with no concurrency errors.

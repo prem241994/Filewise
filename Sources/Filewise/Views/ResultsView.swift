@@ -70,7 +70,7 @@ struct ResultsView: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-                Text(title).font(Theme.pageTitle).lineLimit(1)
+                Text(title).font(Theme.pageTitle).lineLimit(1).accessibilityAddTraits(.isHeader)
                 Text("\(Theme.count(library.visible.count, "file")) · \(Theme.bytes(library.visible.reduce(0) { $0 + $1.size }))")
                     .foregroundStyle(.secondary)
             }
@@ -182,6 +182,7 @@ struct ResultsView: View {
                                     FileMenuItems(items: contextItems(for: item), onPreview: onPreview, onTrash: onTrash)
                                 }
                                 .accessibilityAction { select(item) }
+                                .fileAccessibilityActions(item, onPreview: onPreview, onTrash: onTrash)
                         }
                     }
                     .padding(.horizontal, Theme.Spacing.page)

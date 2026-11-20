@@ -51,6 +51,7 @@ struct DetailInspectorView: View {
                                 Image(systemName: reason.symbol)
                                     .foregroundStyle(Theme.color(for: reason))
                                     .frame(width: 18)
+                                    .accessibilityHidden(true)
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(reason.label).font(.callout.weight(.medium))
                                     Text(reason.explanation).font(.caption).foregroundStyle(.secondary)
@@ -112,6 +113,8 @@ struct DetailInspectorView: View {
         Text(text.uppercased())
             .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(.secondary)
+            .accessibilityLabel(text)
+            .accessibilityAddTraits(.isHeader)
     }
 
     private func metaRow(_ title: String, _ value: String) -> some View {
@@ -134,6 +137,7 @@ struct MultiSelectionInspectorView: View {
                     Image(systemName: "doc.on.doc")
                         .font(.system(size: 40))
                         .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
                     Text(Theme.count(items.count, "file")).font(.headline)
                     Text(Theme.bytes(items.reduce(0) { $0 + $1.size })).foregroundStyle(.secondary)
                 }

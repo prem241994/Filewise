@@ -18,10 +18,12 @@ struct TrashProgressDialog: View {
                 ZStack {
                     Circle()
                         .fill(library.trashIsCompleted ? Color.green.opacity(0.14) : Color.red.opacity(0.12))
+                        .accessibilityHidden(true)
                         .frame(width: 48, height: 48)
                     Image(systemName: library.trashIsCompleted ? "checkmark.circle.fill" : "trash.fill")
                         .font(.system(size: 24))
                         .foregroundStyle(library.trashIsCompleted ? .green : .red)
+                        .accessibilityHidden(true)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {

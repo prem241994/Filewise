@@ -54,6 +54,7 @@ struct SearchSuggestionsView: View {
                                     .font(.system(size: 13))
                                     .foregroundStyle(suggestion.color)
                                     .frame(width: 20)
+                                    .accessibilityHidden(true)
 
                                 Text(suggestion.title)
                                     .font(.system(size: 12, weight: .medium))
@@ -96,6 +97,7 @@ struct SearchSuggestionsView: View {
                                     Image(systemName: "clock")
                                         .font(.system(size: 11))
                                         .foregroundStyle(muted)
+                                        .accessibilityHidden(true)
 
                                     Text(search)
                                         .font(.system(size: 12))
@@ -106,12 +108,14 @@ struct SearchSuggestionsView: View {
                                     Image(systemName: "arrow.up.left")
                                         .font(.system(size: 10))
                                         .foregroundStyle(muted)
+                                        .accessibilityHidden(true)
                                 }
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel("Recent search: \(search)")
                         }
                     }
                 }
@@ -124,6 +128,7 @@ struct SearchSuggestionsView: View {
                 Image(systemName: "sparkles")
                     .font(.system(size: 12))
                     .foregroundStyle(.blue)
+                    .accessibilityHidden(true)
                 Text("Tip: Combine natural terms like “recent pdf” or “large videos”")
                     .font(.system(size: 11))
                     .foregroundStyle(muted)

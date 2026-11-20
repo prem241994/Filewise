@@ -15,7 +15,7 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 32) {
             if library.folder != nil {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-                    Text(greeting).font(Theme.pageTitle)
+                    Text(greeting).font(Theme.pageTitle).accessibilityAddTraits(.isHeader)
                     Text("\(Theme.count(library.files.count, "file")) · \(Theme.bytes(library.summary(for: "Home").bytes)) in \(library.folder?.lastPathComponent ?? "")")
                         .foregroundStyle(.secondary)
                 }
@@ -81,7 +81,7 @@ struct HomeView: View {
                                         @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
             HStack(alignment: .firstTextBaseline) {
-                Text(title).font(Theme.sectionTitle)
+                Text(title).font(Theme.sectionTitle).accessibilityAddTraits(.isHeader)
                 Spacer()
                 if let category {
                     Button("See All") { library.category = category }
@@ -169,6 +169,7 @@ struct HomeView: View {
                                 .onTapGesture { library.selectedIDs = [item.id] }
                                 .contextMenu { FileMenuItems(items: [item], onPreview: onPreview, onTrash: onTrash) }
                                 .accessibilityAction { library.selectedIDs = [item.id] }
+                                .fileAccessibilityActions(item, onPreview: onPreview, onTrash: onTrash)
                         }
                     }
                 }
@@ -197,6 +198,7 @@ struct HomeView: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction { library.selectedIDs = [item.id] }
+        .fileAccessibilityActions(item, onPreview: onPreview, onTrash: onTrash)
     }
 }
 
@@ -233,6 +235,7 @@ struct ScanNoticeView: View {
                 Image(systemName: notice.icon)
                     .font(.system(size: 22))
                     .foregroundStyle(.orange)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                     Text(notice.title).font(.headline)
                     Text(notice.message).foregroundStyle(.secondary)
