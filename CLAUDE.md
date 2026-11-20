@@ -82,7 +82,7 @@ Two modules:
 
 ### Trial and unlock
 
-The business model is a 7-day free trial, then a $4.99 non-consumable in-app purchase (`License.unlockProductID`), using StoreKit 2 with no server.
+The business model is a 7-day free trial, then a $5.99 non-consumable in-app purchase (`License.unlockProductID`), using StoreKit 2 with no server.
 - **App Review Guideline 3.1.1:** the trial is a free ($0) non-consumable named "7-day Trial" (`License.trialProductID`) that the user starts with a button. Before it starts, the app must show the trial's length, what stops working, and the price. `Store.trialTerms` is that text, shown on the welcome page and in the sheet. Don't start the trial silently, and keep those terms accurate if gating changes.
 - `FilewiseCore/Models/License.swift` holds the pure trial math (`LicenseStatus`: checking, notStarted, trial, expired, unlocked). `Services/Store.swift` (`@MainActor`, shared from `FilewiseApp`) takes the trial start from the trial product's purchase date and the unlock from `Transaction.currentEntitlements`, and listens to `Transaction.updates`. When the trial product is unavailable (not an App Store install), Start Free Trial saves a local start date instead.
 - **Only cleanup actions are gated.** Move to Trash (`ContentView.requestTrash`) and Select Extra Copies (`ResultsView`) go through `store.requireUnlock`, which shows `PaywallView` when expired. Search, browsing, suggestions, and **Undo** must stay free. Never gate restore.

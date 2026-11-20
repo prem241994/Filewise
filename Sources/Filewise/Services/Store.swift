@@ -70,7 +70,7 @@ final class Store: ObservableObject {
     /// has not answered.
     var priceText: String {
         #if FILEWISE_LICENSE_TESTING
-        if override != nil { return "$4.99" }
+        if override != nil { return "$5.99" }
         #endif
         return product?.displayPrice ?? ""
     }
