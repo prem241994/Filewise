@@ -42,9 +42,12 @@ enum SnapshotHook {
             guard let library else { return }
             let parts = step.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
             if parts.count > 1, parts[1] == "Paywall", let store {
-                // The unlock sheet, as shown for the Clean Up suggestions.
-                let suggestions = library.summary(for: "Clean Up")
-                store.paywall = PaywallRequest(bytes: suggestions.bytes, count: suggestions.count)
+                // The unlock sheet: the one already shown by itself when the trial
+                // has ended, or else as shown for the Clean Up suggestions.
+                if store.paywall == nil {
+                    let suggestions = library.summary(for: "Clean Up")
+                    store.paywall = PaywallRequest(bytes: suggestions.bytes, count: suggestions.count)
+                }
                 try? await Task.sleep(for: .milliseconds(1500))
                 let sheet = NSApp.windows.first { $0.isVisible && $0.isSheet }
                 capture(to: output.appendingPathComponent("\(parts[0])-\(appearance).png"), window: sheet)

@@ -10,11 +10,18 @@ struct PaywallView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     private var title: String {
-        request.bytes > 0 ? "Unlock Filewise to clean up \(Theme.bytes(request.bytes))" : "Unlock Filewise"
+        if request.trialEnded { return "Your free trial has ended" }
+        return request.bytes > 0 ? "Unlock Filewise to clean up \(Theme.bytes(request.bytes))" : "Unlock Filewise"
     }
 
     private var subtitle: String {
-        switch store.status {
+        if request.trialEnded {
+            let offer = request.bytes > 0
+                ? "Unlock Filewise to clean up the \(Theme.bytes(request.bytes)) it found."
+                : "Unlock Filewise once to keep cleaning up."
+            return offer + " Searching and browsing stay free."
+        }
+        return switch store.status {
         case .trial(let days):
             "Your free trial has \(Theme.count(days, "day")) left. Unlock now to keep cleaning up after it ends."
         case .unlocked:

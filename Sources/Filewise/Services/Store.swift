@@ -7,6 +7,8 @@ struct PaywallRequest: Identifiable {
     let id = UUID()
     let bytes: Int64
     let count: Int
+    /// Shown by itself when the trial has ended, rather than from an action.
+    var trialEnded = false
 }
 
 /// The free trial and the one-time unlock, through StoreKit 2 with no server.

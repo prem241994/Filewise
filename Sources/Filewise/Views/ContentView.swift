@@ -13,6 +13,8 @@ struct ContentView: View {
     @State private var showSearchSuggestions = false
     @State private var showRebuildConfirmation = false
     @State private var folderDropTargeted = false
+    /// The trial-ended sheet appears by itself once per launch.
+    @State private var trialEndedPrompted = false
     @FocusState private var isSearchFocused: Bool
     @FocusState private var isResultsFocused: Bool
 
@@ -71,7 +73,16 @@ struct ContentView: View {
         .sheet(item: $store.paywall) { request in
             PaywallView(store: store, request: request)
         }
-        .onAppear { focusRequestedSearch() }
+        .onAppear {
+            focusRequestedSearch()
+            // Give the saved folder's scan a moment to start, so the sheet can name its size.
+            Task {
+                try? await Task.sleep(for: .seconds(1))
+                promptIfTrialEnded()
+            }
+        }
+        .onChange(of: store.status) { promptIfTrialEnded() }
+        .onChange(of: library.scanning) { promptIfTrialEnded() }
         .onChange(of: navigation.searchRequested) { _, requested in
             if requested { focusRequestedSearch() }
         }
@@ -309,6 +320,16 @@ struct ContentView: View {
 
     private func preview(_ item: FileItem) {
         library.previewURL = item.url
+    }
+
+    /// Shows the unlock sheet once when the trial has ended, after any scan,
+    /// with the size of the cleanup suggestions it found.
+    private func promptIfTrialEnded() {
+        guard store.status == .expired, !trialEndedPrompted, store.paywall == nil,
+              !library.scanning, !library.isTrashing else { return }
+        trialEndedPrompted = true
+        let suggestions = library.summary(for: "Clean Up")
+        store.paywall = PaywallRequest(bytes: suggestions.bytes, count: suggestions.count, trialEnded: true)
     }
 
     /// Asks before moving files; after the trial, offers the unlock instead.

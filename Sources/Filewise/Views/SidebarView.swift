@@ -101,17 +101,13 @@ struct SidebarView: View {
         .accessibilityHint("Scans this folder")
     }
 
-    /// Days left in the trial, or that it ended; hidden once unlocked.
+    /// Days left in the trial. When it has ended, the unlock sheet appears
+    /// by itself instead (see ContentView).
     @ViewBuilder private var trialBanner: some View {
-        let text: String? = switch store.status {
-        case .trial(let days): "Trial: \(Theme.count(days, "day")) left"
-        case .expired: "Trial ended"
-        default: nil
-        }
-        if let text {
+        if case .trial(let days) = store.status {
+            let text = "Trial: \(Theme.count(days, "day")) left"
             HStack(spacing: Theme.Spacing.s) {
-                Image(systemName: store.status == .expired ? "lock.fill" : "sparkles")
-                    .foregroundStyle(store.status == .expired ? Color.orange : Color.accentColor)
+                Image(systemName: "sparkles").foregroundStyle(Color.accentColor)
                 Text(text).lineLimit(1)
                 Spacer(minLength: Theme.Spacing.xs)
                 Button("Unlock") { store.showUnlock() }
@@ -121,7 +117,7 @@ struct SidebarView: View {
             .font(.caption)
             .padding(.horizontal, Theme.Spacing.m)
             .padding(.vertical, Theme.Spacing.s)
-            .background(Theme.tint(store.status == .expired ? .orange : .accentColor),
+            .background(Theme.tint(.accentColor),
                         in: RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous))
             .padding(.horizontal, Theme.Spacing.s)
             .padding(.bottom, Theme.Spacing.s)
