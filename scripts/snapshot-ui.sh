@@ -16,6 +16,8 @@ trap 'rm -rf "$fixture" "$db_dir"' EXIT
 
 mkdir -p "$app_dir/Contents/MacOS" "$output"
 cp "$project_dir/Resources/Info.plist" "$app_dir/Contents/Info.plist"
+mkdir -p "$app_dir/Contents/Resources"
+cp "$project_dir/Resources/AppIcon.icns" "$app_dir/Contents/Resources/AppIcon.icns"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier app.filewise.snapshot" "$app_dir/Contents/Info.plist"
 build_core "$build_dir/core"
 swiftc "${swift_flags[@]}" "${app_frameworks[@]}" "${core_link_flags[@]}" -D FILEWISE_SNAPSHOT -D FILEWISE_LICENSE_TESTING \

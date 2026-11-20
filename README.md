@@ -40,6 +40,10 @@ The app reads file metadata and hashes possible duplicates within the selected f
 
 When you choose **Move to Trash**, Filewise records each move as it happens and stops if it cannot save an Undo record. Undo for the latest recorded batch returns after reopening the selected folder, including after cancellation. If a move is interrupted before its Trash location is saved, check macOS Trash manually. The size shown in progress is the size moved to Trash; macOS does not reclaim that disk space until Trash is emptied.
 
+## App icon
+
+The icon is drawn in code in `tools/AppIcon.swift`. Run `./scripts/make-icon.sh` after changing it to regenerate `Resources/AppIcon-1024.png` and `Resources/AppIcon.icns`.
+
 ## Check the UI
 
 Run `./scripts/snapshot-ui.sh [output-dir]` to capture the main screens in light and dark mode against a disposable sample folder (default output: `.build/snapshots`). It builds a separate copy of the app with a development-only capture hook from `tools/SnapshotHook.swift`; the shipping build never includes it. It uses an isolated index and its own preferences, so your library is untouched.

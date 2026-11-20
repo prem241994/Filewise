@@ -36,6 +36,10 @@ CI (`.github/workflows/macos.yml`) runs `package.sh` plus the license, duplicate
 
 Harnesses that touch the index must set `FILEWISE_TEST_DATABASE_DIRECTORY` to a temp dir (the scripts already do). Otherwise `FileIndex` writes to the real index in `~/Library/Application Support/Filewise/`. The sandboxed app uses its container instead, at `~/Library/Containers/app.filewise.desktop/Data/Library/Application Support/Filewise/`.
 
+### App icon
+
+`tools/AppIcon.swift` draws the icon as a SwiftUI view on the macOS icon grid: an 824-point rounded square on a 1024 canvas. `./scripts/make-icon.sh` renders it to `Resources/AppIcon-1024.png` and `Resources/AppIcon.icns`, and `build.sh` copies the `.icns` into the app (`CFBundleIconFile`). Change the drawing, rerun the script, and commit both outputs. App Store submission will also need an asset-catalog `AppIcon` built from the 1024 PNG, which requires Xcode's `actool`.
+
 ### UI verification
 
 `./scripts/snapshot-ui.sh [output-dir] [steps]` builds a separate app copy with `-D FILEWISE_SNAPSHOT` and `tools/SnapshotHook.swift`. It runs that copy against a generated sample folder and writes light and dark PNGs to `.build/snapshots`. It uses an isolated index and the bundle ID `app.filewise.snapshot`. Steps are comma-separated `name:category[:query][:select|play|scroll]` entries, and the category `Settings` captures the Settings window. Use this to check UI changes visually. Code under `#if FILEWISE_SNAPSHOT` must never be needed by the shipping build.

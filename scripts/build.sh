@@ -5,6 +5,7 @@ source "${0:A:h}/common.sh"
 app_dir="$build_dir/Filewise.app"
 mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"
 cp "$project_dir/Resources/Info.plist" "$app_dir/Contents/Info.plist"
+cp "$project_dir/Resources/AppIcon.icns" "$app_dir/Contents/Resources/AppIcon.icns"
 
 # FILEWISE_LICENSE_TESTING=1 builds a development copy whose trial state comes
 # from FILEWISE_LICENSE=trial:<days>|expired|unlocked at launch. Never ship it.
