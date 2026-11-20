@@ -8,7 +8,7 @@ set -e
 source "${0:A:h}/common.sh"
 app_dir="$build_dir/snapshot/Filewise.app"
 output=${1:-$build_dir/snapshots}
-steps=${2:-"home:Home,duplicates:Duplicates::select,search:Home:report,cleanup:Clean Up::select"}
+steps=${2:-"welcome:Welcome,home:Home,duplicates:Duplicates::select,search:Home:report,cleanup:Clean Up::select"}
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/filewise-snapshot.XXXXXX")
 db_dir=$(mktemp -d "${TMPDIR:-/tmp}/filewise-snapshot-db.XXXXXX")
 trap 'rm -rf "$fixture" "$db_dir"' EXIT

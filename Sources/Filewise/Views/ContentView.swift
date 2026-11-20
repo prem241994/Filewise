@@ -24,7 +24,9 @@ struct ContentView: View {
                 .navigationSplitViewColumnWidth(min: 190, ideal: 220, max: 300)
         } detail: {
             detail
-                .inspector(isPresented: $navigation.showInspector) {
+                // Hidden on the first-run page, where there are no files to inspect.
+                .inspector(isPresented: Binding(get: { navigation.showInspector && library.folder != nil },
+                                                set: { navigation.showInspector = $0 })) {
                     inspector.inspectorColumnWidth(min: 240, ideal: 280, max: 380)
                 }
         }
@@ -168,6 +170,7 @@ struct ContentView: View {
                     Label("Inspector", systemImage: "sidebar.trailing")
                 }
                 .help(navigation.showInspector ? "Hide file details" : "Show file details")
+                .disabled(library.folder == nil)
             }
         }
     }

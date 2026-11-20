@@ -97,6 +97,7 @@ Phase 2 — Local scanning, search, and dashboard
 - Old downloads now use the later of the modification date and the last-opened date macOS records on each file (`com.apple.lastuseddate#PS`); the inspector shows Last Opened. This adds about 0.05 s per 10,000 files to a scan
 - Added a Settings window (⌘,): large-file size, the age after which screenshots and downloads are old, and ignored folders that scans and the folder watcher skip. Limits apply immediately; changing ignored folders rescans
 - Enabled the App Sandbox (user-selected folders read-write, security-scoped bookmarks, Downloads; no network). Chosen folders reopen after relaunch through bookmarks, the selected folder's access is held while it is selected, and Desktop/Documents ask for access once from the sidebar. Verified with a sandboxed probe that Trash Undo restores from `~/.Trash` both in the same launch and after a relaunch. `package.sh` fails if the sandbox entitlement is lost or a network entitlement appears
+- Added a first-run welcome page on Home: what Filewise does, Trash with Undo, privacy, a one-click Scan Downloads (no permission prompt in the sandbox), and Choose Another Folder. The inspector stays hidden until a folder is chosen. `snapshot-ui.sh` captures it as the `welcome` step
 
 ## Current limitations
 

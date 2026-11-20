@@ -13,11 +13,19 @@ enum SnapshotHook {
         let env = ProcessInfo.processInfo.environment
         guard let output = env["FILEWISE_SNAPSHOT_DIR"], let folder = env["FILEWISE_SNAPSHOT_FOLDER"] else { return }
         let appearance = env["FILEWISE_SNAPSHOT_APPEARANCE"] ?? "light"
-        // Each step is name:category[:query][:select|play|scroll]; category "Settings" captures the Settings window
+        // Each step is name:category[:query][:select|play|scroll]; category "Settings" captures the
+        // Settings window, and a first step with category "Welcome" captures the first-run page.
         let steps = (env["FILEWISE_SNAPSHOT_STEPS"] ?? "home:Home").split(separator: ",").map(String.init)
         Task {
             try? await Task.sleep(for: .seconds(1))
             NSApp.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
+            var steps = steps
+            if let first = steps.first, first.split(separator: ":").dropFirst().first == "Welcome" {
+                try? await Task.sleep(for: .milliseconds(800))
+                let name = first.split(separator: ":").first.map(String.init) ?? "welcome"
+                capture(to: URL(fileURLWithPath: output).appendingPathComponent("\(name)-\(appearance).png"))
+                steps.removeFirst()
+            }
             library?.scan(URL(fileURLWithPath: folder))
             await run(steps, output: URL(fileURLWithPath: output), appearance: appearance)
             NSApp.terminate(nil)

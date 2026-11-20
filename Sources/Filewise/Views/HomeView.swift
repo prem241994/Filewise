@@ -14,14 +14,14 @@ struct HomeView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 32) {
             VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-                Text(greeting).font(Theme.pageTitle)
+                Text(library.folder == nil ? "Welcome to Filewise" : greeting).font(Theme.pageTitle)
                 if library.folder != nil {
                     Text("\(Theme.count(library.files.count, "file")) · \(Theme.bytes(library.summary(for: "Home").bytes)) in \(library.folder?.lastPathComponent ?? "")")
                         .foregroundStyle(.secondary)
                 }
             }
             if library.folder == nil {
-                welcome
+                WelcomeView(library: library)
             } else if !library.scanning && library.files.isEmpty && library.scanNotice != nil {
                 ScanNoticeView(library: library)
             } else {
@@ -75,24 +75,6 @@ struct HomeView: View {
         case 12..<17: "Good afternoon"
         default: "Good evening"
         }
-    }
-
-    private var welcome: some View {
-        VStack(spacing: Theme.Spacing.m) {
-            Image(systemName: "folder.badge.plus").font(.system(size: 36)).foregroundStyle(.tint)
-            Text("Your files, in one place").font(.title3.weight(.semibold))
-            Text("Choose a folder to explore its files and cleanup suggestions. Filewise keeps everything on this Mac.")
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            Button("Choose Folder…") { library.chooseFolder() }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-            Text("You can also drop a folder onto this window.")
-                .font(.caption).foregroundStyle(.tertiary)
-        }
-        .padding(40)
-        .frame(maxWidth: .infinity, minHeight: 320)
-        .background(Theme.tint(.accentColor), in: RoundedRectangle(cornerRadius: Theme.Radius.l))
     }
 
     private func section<Content: View>(_ title: String, seeAll category: String? = nil,
