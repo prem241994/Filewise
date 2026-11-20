@@ -5,6 +5,7 @@ import SwiftUI
 /// Filewise → Settings… (⌘,)
 struct SettingsView: View {
     @EnvironmentObject private var settings: AppSettings
+    @EnvironmentObject private var store: Store
     @State private var selectedFolder: String?
 
     var body: some View {
@@ -62,6 +63,25 @@ struct SettingsView: View {
             }
 
             Section {
+                LabeledContent("Status", value: licenseText)
+                HStack {
+                    if store.status != .unlocked {
+                        Button("Unlock Filewise…") { store.showUnlock() }
+                    }
+                    Button("Restore Purchase") { Task { await store.restore() } }
+                        .disabled(store.isPurchasing)
+                }
+                if let error = store.purchaseError, store.paywall == nil {
+                    Text(error).font(.callout).foregroundStyle(.orange)
+                }
+            } header: {
+                Text("Purchase")
+            } footer: {
+                Text("Searching, browsing, and Undo are always free. Moving files to the Trash needs the one-time unlock after the 7-day trial.")
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 Label("Filewise keeps your file index on this Mac and never sends file names or contents anywhere.",
                       systemImage: "lock.shield")
                     .foregroundStyle(.secondary)
@@ -76,6 +96,15 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 500)
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var licenseText: String {
+        switch store.status {
+        case .checking: "Checking…"
+        case .trial(let days): "Free trial, \(Theme.count(days, "day")) left"
+        case .expired: "Trial ended"
+        case .unlocked: "Unlocked. Thank you!"
+        }
     }
 
     private func addFolder() {

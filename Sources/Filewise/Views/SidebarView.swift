@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SidebarView: View {
     @ObservedObject var library: Library
+    @EnvironmentObject private var store: Store
     let onRebuildIndex: () -> Void
 
     /// Choosing a sidebar item leaves search, so the selected view is what shows.
@@ -20,6 +21,7 @@ struct SidebarView: View {
     var body: some View {
         VStack(spacing: 0) {
             list
+            trialBanner
             statusFooter
         }
     }
@@ -97,6 +99,34 @@ struct SidebarView: View {
         .accessibilityLabel("\(name) folder")
         .accessibilityValue(isSelected ? "Selected location" : "")
         .accessibilityHint("Scans this folder")
+    }
+
+    /// Days left in the trial, or that it ended; hidden once unlocked.
+    @ViewBuilder private var trialBanner: some View {
+        let text: String? = switch store.status {
+        case .trial(let days): "Trial: \(Theme.count(days, "day")) left"
+        case .expired: "Trial ended"
+        default: nil
+        }
+        if let text {
+            HStack(spacing: Theme.Spacing.s) {
+                Image(systemName: store.status == .expired ? "lock.fill" : "sparkles")
+                    .foregroundStyle(store.status == .expired ? Color.orange : Color.accentColor)
+                Text(text).lineLimit(1)
+                Spacer(minLength: Theme.Spacing.xs)
+                Button("Unlock") { store.showUnlock() }
+                    .buttonStyle(.link)
+                    .fontWeight(.semibold)
+            }
+            .font(.caption)
+            .padding(.horizontal, Theme.Spacing.m)
+            .padding(.vertical, Theme.Spacing.s)
+            .background(Theme.tint(store.status == .expired ? .orange : .accentColor),
+                        in: RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous))
+            .padding(.horizontal, Theme.Spacing.s)
+            .padding(.bottom, Theme.Spacing.s)
+            .accessibilityElement(children: .combine)
+        }
     }
 
     private var statusFooter: some View {

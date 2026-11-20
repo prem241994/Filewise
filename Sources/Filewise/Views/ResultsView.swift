@@ -5,6 +5,7 @@ import SwiftUI
 struct ResultsView: View {
     @ObservedObject var library: Library
     @EnvironmentObject private var navigation: FilewiseNavigation
+    @EnvironmentObject private var store: Store
     var isResultsFocused: FocusState<Bool>.Binding
     let onPreview: (FileItem) -> Void
     let onTrash: ([FileItem]) -> Void
@@ -16,7 +17,11 @@ struct ResultsView: View {
 
     private func selectExtraCopies(keeping rule: KeepRule) {
         keepRuleValue = rule.rawValue
-        library.selectDuplicateCopies(keeping: rule)
+        let extras = DuplicateSelection.extraCopies(in: library.files, keeping: rule)
+        let bytes = library.files.reduce(Int64(0)) { extras.contains($1.id) ? $0 + $1.size : $0 }
+        store.requireUnlock(bytes: bytes, count: extras.count) {
+            library.selectDuplicateCopies(keeping: rule)
+        }
     }
 
     private var layoutKey: String { library.query.isEmpty ? library.category : "Search" }

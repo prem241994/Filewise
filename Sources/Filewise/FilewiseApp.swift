@@ -6,6 +6,7 @@ import SwiftUI
 struct FilewiseApp: App {
     @StateObject private var navigation = FilewiseNavigation()
     @StateObject private var settings = AppSettings()
+    @StateObject private var store = Store()
 
     init() {
         #if FILEWISE_SNAPSHOT
@@ -18,14 +19,15 @@ struct FilewiseApp: App {
             ContentView()
                 .environmentObject(navigation)
                 .environmentObject(settings)
+                .environmentObject(store)
         }
         .defaultSize(width: 1200, height: 780)
         .commands {
             SidebarCommands()
-            FilewiseCommands(navigation: navigation)
+            FilewiseCommands(navigation: navigation, store: store)
         }
         Settings {
-            SettingsView().environmentObject(settings)
+            SettingsView().environmentObject(settings).environmentObject(store)
         }
         MenuBarExtra("Filewise", systemImage: "folder.badge.magnifyingglass") {
             FilewiseMenu().environmentObject(navigation)
@@ -45,8 +47,14 @@ final class FilewiseNavigation: ObservableObject {
 private struct FilewiseCommands: Commands {
     @FocusedObject private var library: Library?
     let navigation: FilewiseNavigation
+    @ObservedObject var store: Store
 
     var body: some Commands {
+        CommandGroup(after: .appInfo) {
+            if store.status != .unlocked {
+                Button("Unlock Filewise…") { store.showUnlock() }
+            }
+        }
         CommandGroup(replacing: .undoRedo) {
             Button("Undo") { undo() }
                 .keyboardShortcut("z")

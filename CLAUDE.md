@@ -24,6 +24,7 @@ There is no XCTest. Each test is a standalone `@main` harness in `tests/`. It co
 
 | Script | Covers |
 |---|---|
+| `scripts/test-license.sh` | trial length, day counting, expiry, unlock gating (Core only) |
 | `scripts/test-duplicates.sh` | keep rules for "Select Extra Copies" (Core only) |
 | `scripts/test-scan-search.sh` | scanning, cancellation, FTS search, missing/restricted folders, settings |
 | `scripts/test-index-health.sh` | schema migration, Undo-record preservation, corrupt DB handling |
@@ -31,7 +32,7 @@ There is no XCTest. Each test is a standalone `@main` harness in `tests/`. It co
 | `scripts/test-trash-cancellation.sh` | real macOS Trash; **local only** (needs Trash access, not in CI) |
 | `scripts/benchmark-scan.sh` | 10k-file scan/refresh timing and peak RSS (`FILEWISE_BENCHMARK_FILES` sets the size) |
 
-CI (`.github/workflows/macos.yml`) runs `package.sh` plus the duplicates, index-health, scan-search, and trash-safety scripts. To add a test, write `tests/FooHarness.swift` and a matching `scripts/test-foo.sh` modeled on an existing one, then add a step to the workflow.
+CI (`.github/workflows/macos.yml`) runs `package.sh` plus the license, duplicates, index-health, scan-search, and trash-safety scripts. To add a test, write `tests/FooHarness.swift` and a matching `scripts/test-foo.sh` modeled on an existing one, then add a step to the workflow.
 
 Harnesses that touch the index must set `FILEWISE_TEST_DATABASE_DIRECTORY` to a temp dir (the scripts already do). Otherwise `FileIndex` writes to the real index in `~/Library/Application Support/Filewise/`. The sandboxed app uses its container instead, at `~/Library/Containers/app.filewise.desktop/Data/Library/Application Support/Filewise/`.
 
@@ -72,6 +73,14 @@ Two modules:
 - `Library.folder`'s `didSet` holds `startAccessingSecurityScopedResource()` for as long as a folder is selected, because Trash, Undo, Quick Look, thumbnails, and the watcher all need it. Don't move file work outside the selected folder without a grant.
 - Use `FolderAccess.homeDirectory` for the user's real home. In the sandbox, `NSHomeDirectory()` and `FileManager.urls(for:in:)` point into the container.
 - Testing confirmed that Undo restore from `~/.Trash` works under the sandbox, both in the same launch and after a relaunch, without extra bookmarks for the trashed files. It has not been checked for folders on other volumes, which use `/Volumes/…/.Trashes`.
+
+### Trial and unlock
+
+The business model is a 7-day free trial, then a $4.99 non-consumable in-app purchase (`License.unlockProductID`), using StoreKit 2 with no server.
+- `FilewiseCore/Models/License.swift` holds the pure trial math (`LicenseStatus`). `Services/Store.swift` (`@MainActor`, shared from `FilewiseApp`) reads `AppTransaction.originalPurchaseDate` for the trial start, `Transaction.currentEntitlements` for the unlock, and listens to `Transaction.updates`. Outside an App Store install it falls back to a saved first-launch date.
+- **Only cleanup actions are gated.** Move to Trash (`ContentView.requestTrash`) and Select Extra Copies (`ResultsView`) go through `store.requireUnlock`, which shows `PaywallView` when expired. Search, browsing, suggestions, and **Undo** must stay free. Never gate restore.
+- `FILEWISE_LICENSE_TESTING=1 ./scripts/build.sh` compiles in an override read from `FILEWISE_LICENSE=trial:<days>|expired|unlocked` at launch, and test purchases succeed instantly. The snapshot build always has it (default `trial:5`), and the `Paywall` snapshot step captures the sheet. The shipping build must not contain it: `strings` on the binary should not find `FILEWISE_LICENSE`.
+- Real purchases can only be tested once the product exists in App Store Connect, through a sandbox account. There is no `.storekit` configuration because there is no Xcode project.
 
 The integration harnesses drive `Library` itself, which is why they compile the ViewModels sources together with AppKit and SwiftUI.
 

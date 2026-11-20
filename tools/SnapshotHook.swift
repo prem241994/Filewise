@@ -8,12 +8,14 @@ import FilewiseCore
 @MainActor
 enum SnapshotHook {
     static weak var library: Library?
+    static weak var store: Store?
 
     static func install() {
         let env = ProcessInfo.processInfo.environment
         guard let output = env["FILEWISE_SNAPSHOT_DIR"], let folder = env["FILEWISE_SNAPSHOT_FOLDER"] else { return }
         let appearance = env["FILEWISE_SNAPSHOT_APPEARANCE"] ?? "light"
-        // Each step is name:category[:query][:select|play|scroll]; category "Settings" captures the
+        // Each step is name:category[:query][:select|play|scroll]; category "Paywall" captures the
+        // unlock sheet, category "Settings" captures the
         // Settings window, and a first step with category "Welcome" captures the first-run page.
         let steps = (env["FILEWISE_SNAPSHOT_STEPS"] ?? "home:Home").split(separator: ",").map(String.init)
         Task {
@@ -39,6 +41,17 @@ enum SnapshotHook {
             }
             guard let library else { return }
             let parts = step.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+            if parts.count > 1, parts[1] == "Paywall", let store {
+                // The unlock sheet, as shown for the Clean Up suggestions.
+                let suggestions = library.summary(for: "Clean Up")
+                store.paywall = PaywallRequest(bytes: suggestions.bytes, count: suggestions.count)
+                try? await Task.sleep(for: .milliseconds(1500))
+                let sheet = NSApp.windows.first { $0.isVisible && $0.isSheet }
+                capture(to: output.appendingPathComponent("\(parts[0])-\(appearance).png"), window: sheet)
+                store.paywall = nil
+                try? await Task.sleep(for: .milliseconds(600))
+                continue
+            }
             if parts.count > 1, parts[1] == "Settings" {
                 // ⌘, through the app menu, as a user would open it.
                 let comma = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,

@@ -2,6 +2,7 @@
 # Captures the UI in light and dark mode against a disposable sample folder.
 # Usage: scripts/snapshot-ui.sh [output-dir] [steps]
 # Steps are comma-separated name:category[:query][:select|play|scroll] entries.
+# Set FILEWISE_LICENSE (trial:<days>|expired|unlocked; default trial:5) for the trial state.
 # Set FILEWISE_SNAPSHOT_SOURCE to capture a copy of an existing folder.
 set -e
 
@@ -17,7 +18,7 @@ mkdir -p "$app_dir/Contents/MacOS" "$output"
 cp "$project_dir/Resources/Info.plist" "$app_dir/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier app.filewise.snapshot" "$app_dir/Contents/Info.plist"
 build_core "$build_dir/core"
-swiftc "${swift_flags[@]}" "${app_frameworks[@]}" "${core_link_flags[@]}" -D FILEWISE_SNAPSHOT \
+swiftc "${swift_flags[@]}" "${app_frameworks[@]}" "${core_link_flags[@]}" -D FILEWISE_SNAPSHOT -D FILEWISE_LICENSE_TESTING \
     "$project_dir"/Sources/Filewise/**/*.swift "$project_dir"/tools/SnapshotHook.swift \
     -o "$app_dir/Contents/MacOS/Filewise"
 codesign --force --sign - "$app_dir" >/dev/null
@@ -53,6 +54,7 @@ fi
 for appearance in light dark; do
     FILEWISE_TEST_DATABASE_DIRECTORY="$db_dir/$appearance" FILEWISE_SNAPSHOT_DIR="$output" \
     FILEWISE_SNAPSHOT_FOLDER="$fixture" FILEWISE_SNAPSHOT_APPEARANCE="$appearance" \
-    FILEWISE_SNAPSHOT_STEPS="$steps" "$app_dir/Contents/MacOS/Filewise" >/dev/null 2>&1 || true
+    FILEWISE_SNAPSHOT_STEPS="$steps" FILEWISE_LICENSE=${FILEWISE_LICENSE:-trial:5} \
+    "$app_dir/Contents/MacOS/Filewise" >/dev/null 2>&1 || true
 done
 echo "Snapshots in $output"

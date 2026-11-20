@@ -6,6 +6,7 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject private var navigation: FilewiseNavigation
     @EnvironmentObject private var settings: AppSettings
+    @EnvironmentObject private var store: Store
     @StateObject private var library = Library()
     @State private var pendingTrash: [FileItem] = []
     @State private var showTrashConfirmation = false
@@ -66,6 +67,9 @@ struct ContentView: View {
             Button("Cancel", role: .cancel) { pendingTrash = [] }
         } message: {
             Text(trashMessage)
+        }
+        .sheet(item: $store.paywall) { request in
+            PaywallView(store: store, request: request)
         }
         .onAppear { focusRequestedSearch() }
         .onChange(of: navigation.searchRequested) { _, requested in
@@ -307,10 +311,13 @@ struct ContentView: View {
         library.previewURL = item.url
     }
 
+    /// Asks before moving files; after the trial, offers the unlock instead.
     private func requestTrash(_ items: [FileItem]) {
         guard !items.isEmpty, !library.isTrashing else { return }
-        pendingTrash = items
-        showTrashConfirmation = true
+        store.requireUnlock(bytes: items.reduce(0) { $0 + $1.size }, count: items.count) {
+            pendingTrash = items
+            showTrashConfirmation = true
+        }
     }
 
     private var trashTitle: String {
