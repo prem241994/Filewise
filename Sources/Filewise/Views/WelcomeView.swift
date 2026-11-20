@@ -6,6 +6,8 @@ import SwiftUI
 struct WelcomeView: View {
     @ObservedObject var library: Library
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
 
     private var downloads: URL {
         FolderAccess.homeDirectory.appendingPathComponent("Downloads", isDirectory: true)
@@ -13,12 +15,22 @@ struct WelcomeView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-            hero
+            hero.entrance(appeared, order: 0)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: Theme.Spacing.l, alignment: .top)],
                       spacing: Theme.Spacing.l) { features }
-            dropZone
+                .entrance(appeared, order: 1)
+            dropZone.entrance(appeared, order: 2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .onAppear {
+            if reduceMotion {
+                var instant = Transaction()
+                instant.disablesAnimations = true
+                withTransaction(instant) { appeared = true }
+            } else {
+                appeared = true
+            }
+        }
     }
 
     // MARK: - Hero
@@ -27,35 +39,47 @@ struct WelcomeView: View {
         ViewThatFits(in: .horizontal) {
             // A fixed text width makes the fit test independent of line wrapping.
             HStack(spacing: Theme.Spacing.xl) {
-                heroText.frame(width: 360, alignment: .leading)
+                heroText.frame(width: 380, alignment: .leading)
                 Spacer(minLength: 0)
-                WelcomeIllustration().frame(width: 240, height: 230)
+                WelcomeIllustration().frame(width: 250, height: 250)
                 Spacer(minLength: 0)
             }
             heroText
         }
-        .padding(.horizontal, 36)
-        .padding(.vertical, 32)
+        .padding(.horizontal, 40)
+        .padding(.vertical, 36)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(heroBackground)
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(Color.accentColor.opacity(0.18), lineWidth: 1))
+                .strokeBorder(
+                    LinearGradient(colors: [Color.white.opacity(colorScheme == .dark ? 0.16 : 0.7),
+                                            Color.accentColor.opacity(0.15)],
+                                   startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .shadow(color: Color.indigo.opacity(colorScheme == .dark ? 0.25 : 0.10), radius: 18, y: 8)
     }
 
     private var heroText: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            Text("WELCOME TO FILEWISE")
-                .font(.system(size: 12, weight: .bold))
-                .tracking(1.2)
-                .foregroundStyle(.tint)
+            HStack(spacing: 5) {
+                Image(systemName: "sparkles").foregroundStyle(.tint)
+                Text("Welcome to Filewise").foregroundStyle(.primary.opacity(0.8))
+            }
+            .font(.system(size: 12, weight: .semibold))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color.accentColor.opacity(colorScheme == .dark ? 0.22 : 0.12), in: Capsule())
             Text("Find any file.\nClear the clutter.")
-                .font(.system(size: 34, weight: .bold))
+                .font(.system(size: 38, weight: .bold))
+                .kerning(-0.6)
+                .lineSpacing(-2)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("Search your files in plain words and see the duplicates, old downloads, and large files you can safely remove.")
+            Text("Search your files in plain words, and see the duplicates, old downloads, and large files you can safely remove.")
                 .font(.title3)
                 .foregroundStyle(.secondary)
+                .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: Theme.Spacing.m) {
                 Button {
@@ -73,20 +97,38 @@ struct WelcomeView: View {
             }
             .controlSize(.extraLarge)
             .padding(.top, Theme.Spacing.s)
+            HStack(spacing: Theme.Spacing.m) {
+                assurance("No account needed")
+                assurance("Works offline")
+                assurance("Undo anytime")
+            }
+            .padding(.top, Theme.Spacing.xxs)
         }
     }
 
+    private func assurance(_ text: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            Text(text).foregroundStyle(.secondary)
+        }
+        .font(.caption)
+        .lineLimit(1)
+        .fixedSize()
+    }
+
     private var heroBackground: some View {
-        let strength = colorScheme == .dark ? 0.32 : 0.16
+        let strength = colorScheme == .dark ? 0.34 : 0.17
         return ZStack {
-            LinearGradient(colors: [Color.indigo.opacity(strength), Color.blue.opacity(strength * 0.6),
+            LinearGradient(colors: [Color.indigo.opacity(strength), Color.blue.opacity(strength * 0.55),
                                     Color.teal.opacity(strength * 0.5)],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
             // Soft color glows behind the illustration.
-            Circle().fill(Color.pink.opacity(strength)).frame(width: 260).blur(radius: 70)
-                .offset(x: 260, y: -90)
-            Circle().fill(Color.teal.opacity(strength)).frame(width: 240).blur(radius: 70)
-                .offset(x: 340, y: 110)
+            Circle().fill(Color.pink.opacity(strength * 1.1)).frame(width: 280).blur(radius: 80)
+                .offset(x: 280, y: -100)
+            Circle().fill(Color.teal.opacity(strength)).frame(width: 260).blur(radius: 80)
+                .offset(x: 360, y: 120)
+            Circle().fill(Color.indigo.opacity(strength * 0.8)).frame(width: 220).blur(radius: 70)
+                .offset(x: -320, y: 140)
         }
     }
 
@@ -136,9 +178,12 @@ struct WelcomeView: View {
 
     private var dropZone: some View {
         HStack(spacing: Theme.Spacing.m) {
-            Image(systemName: "tray.and.arrow.down")
-                .font(.system(size: 20))
-                .foregroundStyle(.secondary)
+            Image(systemName: "tray.and.arrow.down.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.tint)
+                .frame(width: 34, height: 34)
+                .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Or drop any folder onto this window").font(.headline)
                 Text("You can switch folders anytime from the sidebar.")
@@ -147,17 +192,27 @@ struct WelcomeView: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(Theme.Spacing.l)
+        .padding(.horizontal, Theme.Spacing.l)
+        .padding(.vertical, Theme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous)
                 .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
-                .foregroundStyle(Theme.hairline.opacity(2)))
+                .foregroundStyle(Color.primary.opacity(0.16)))
         .accessibilityElement(children: .combine)
     }
 }
 
-/// A tinted card like the Library cards: badge, title, text, and an example row.
+private extension View {
+    /// Fades and lifts a section in, one after another.
+    func entrance(_ appeared: Bool, order: Int) -> some View {
+        opacity(appeared ? 1 : 0)
+            .offset(y: appeared ? 0 : 12)
+            .animation(.easeOut(duration: 0.5).delay(0.08 + Double(order) * 0.1), value: appeared)
+    }
+}
+
+/// A tinted card like the Library cards: badge and title, text, and an example row.
 private struct FeatureCard<Accessory: View>: View {
     let icon: String
     let color: Color
@@ -168,27 +223,31 @@ private struct FeatureCard<Accessory: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            Image(systemName: icon)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 36, height: 36)
-                .background(LinearGradient(colors: [color.opacity(0.85), color],
-                                           startPoint: .topLeading, endPoint: .bottomTrailing),
-                            in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .shadow(color: color.opacity(0.35), radius: 4, y: 2)
-                .accessibilityHidden(true)
-            Text(title).font(.system(size: 15, weight: .semibold)).padding(.top, Theme.Spacing.xxs)
+            HStack(spacing: Theme.Spacing.m) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 32, height: 32)
+                    .background(LinearGradient(colors: [color.opacity(0.85), color],
+                                               startPoint: .topLeading, endPoint: .bottomTrailing),
+                                in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .shadow(color: color.opacity(0.35), radius: 4, y: 2)
+                    .accessibilityHidden(true)
+                Text(title).font(.system(size: 15, weight: .semibold))
+            }
             Text(detail)
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                .lineSpacing(1)
                 .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
-            accessory.padding(.top, Theme.Spacing.xxs)
+                .padding(.top, Theme.Spacing.xxs)
+            Spacer(minLength: Theme.Spacing.s)
+            accessory
         }
         .padding(Theme.Spacing.l)
-        .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
-        .background(LinearGradient(colors: [color.opacity(colorScheme == .dark ? 0.24 : 0.12),
-                                            color.opacity(colorScheme == .dark ? 0.08 : 0.03)],
+        .frame(maxWidth: .infinity, minHeight: 156, alignment: .topLeading)
+        .background(LinearGradient(colors: [color.opacity(colorScheme == .dark ? 0.24 : 0.11),
+                                            color.opacity(colorScheme == .dark ? 0.07 : 0.025)],
                                    startPoint: .topLeading, endPoint: .bottomTrailing))
         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous)
             .strokeBorder(color.opacity(0.18), lineWidth: 1))
@@ -197,41 +256,79 @@ private struct FeatureCard<Accessory: View>: View {
     }
 }
 
-/// File-type badges that fly out around a magnifying glass and then float.
+/// File-type badges that spring out around a magnifying glass, then slowly
+/// orbit it while a few sparkles twinkle. Still when Reduce Motion is on.
 private struct WelcomeIllustration: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var appeared = false
-    @State private var floating = false
+    @State private var start = Date()
 
-    private let badges: [(category: String, x: CGFloat, y: CGFloat, angle: Double)] = [
-        ("Images", -82, -58, -10), ("Documents", 0, -88, 4), ("Videos", 82, -52, 9),
-        ("Music", -90, 40, 7), ("Archives", 88, 46, -8), ("Apps", 2, 88, -4),
-    ]
+    private let categories = ["Images", "Documents", "Videos", "Archives", "Apps", "Music"]
+    private let tilts: [Double] = [-10, 4, 9, -8, -4, 7]
+    private let sparkles: [(x: CGFloat, y: CGFloat, size: CGFloat)] = [(-112, -100, 12), (116, 4, 10), (-36, 116, 9)]
 
     var body: some View {
-        ZStack {
-            Circle()
-                .strokeBorder(Color.accentColor.opacity(0.18), style: StrokeStyle(lineWidth: 1, dash: [4, 6]))
-                .frame(width: 176, height: 176)
-            ForEach(Array(badges.enumerated()), id: \.offset) { index, badge in
-                let color = Theme.color(for: badge.category)
-                Image(systemName: Theme.icon(for: badge.category))
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 46, height: 46)
-                    .background(LinearGradient(colors: [color.opacity(0.8), color],
-                                               startPoint: .topLeading, endPoint: .bottomTrailing),
-                                in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                    .shadow(color: color.opacity(0.4), radius: 8, y: 4)
-                    .rotationEffect(.degrees(badge.angle))
-                    .offset(x: appeared ? badge.x : 0,
-                            y: (appeared ? badge.y : 0) + (floating ? (index.isMultiple(of: 2) ? -5 : 5) : 0))
-                    .scaleEffect(appeared ? 1 : 0.3)
-                    .opacity(appeared ? 1 : 0)
-                    .animation(.spring(response: 0.6, dampingFraction: 0.7).delay(Double(index) * 0.06), value: appeared)
-                    .animation(.easeInOut(duration: 2.2 + Double(index) * 0.25).repeatForever(autoreverses: true),
-                               value: floating)
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { context in
+            let elapsed = reduceMotion ? 10 : context.date.timeIntervalSince(start)
+            // One revolution every 60 seconds.
+            let orbit = reduceMotion ? 0 : elapsed / 60 * 2 * .pi
+            ZStack {
+                Circle()
+                    .strokeBorder(Color.accentColor.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [3, 6]))
+                    .frame(width: 186, height: 186)
+                Circle()
+                    .strokeBorder(Color.accentColor.opacity(0.1), lineWidth: 1)
+                    .frame(width: 132, height: 132)
+                ForEach(sparkles.indices, id: \.self) { index in
+                    let sparkle = sparkles[index]
+                    let twinkle = reduceMotion ? 0.8 : 0.45 + 0.55 * (0.5 + 0.5 * sin(elapsed * 1.6 + Double(index) * 2))
+                    Image(systemName: "sparkle")
+                        .font(.system(size: sparkle.size, weight: .bold))
+                        .foregroundStyle(Color.accentColor.opacity(0.7))
+                        .opacity(twinkle * progress(elapsed, delay: 0.5))
+                        .scaleEffect(0.8 + 0.2 * twinkle)
+                        .offset(x: sparkle.x, y: sparkle.y)
+                }
+                ForEach(categories.indices, id: \.self) { index in
+                    badge(index, elapsed: elapsed, orbit: orbit)
+                }
+                center(elapsed)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .accessibilityHidden(true)
+        .onAppear { start = Date() }
+    }
+
+    private func badge(_ index: Int, elapsed: Double, orbit: Double) -> some View {
+        let category = categories[index]
+        let color = Theme.color(for: category)
+        let grow = easeOutBack(progress(elapsed, delay: 0.15 + Double(index) * 0.06))
+        let angle = orbit + Double(index) / Double(categories.count) * 2 * .pi - .pi / 2
+        let radius = 93 * grow
+        let bob = reduceMotion ? 0 : 3 * sin(elapsed * 1.3 + Double(index))
+        return Image(systemName: Theme.icon(for: category))
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 46, height: 46)
+            .background(LinearGradient(colors: [color.opacity(0.78), color],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing),
+                        in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5))
+            .shadow(color: color.opacity(0.4), radius: 8, y: 4)
+            .rotationEffect(.degrees(tilts[index]))
+            .scaleEffect(0.3 + 0.7 * grow)
+            .opacity(min(1, progress(elapsed, delay: 0.15 + Double(index) * 0.06) * 2))
+            .offset(x: radius * cos(angle), y: radius * sin(angle) + bob)
+    }
+
+    private func center(_ elapsed: Double) -> some View {
+        let pulse = reduceMotion ? 0 : 0.5 + 0.5 * sin(elapsed * 1.2)
+        return ZStack {
+            Circle()
+                .fill(Color.accentColor.opacity(0.14))
+                .frame(width: 104, height: 104)
+                .scaleEffect(1 + 0.06 * pulse)
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 32, weight: .semibold))
                 .foregroundStyle(.white)
@@ -239,20 +336,20 @@ private struct WelcomeIllustration: View {
                 .background(LinearGradient(colors: [Color.accentColor.opacity(0.75), .accentColor, .indigo],
                                            startPoint: .topLeading, endPoint: .bottomTrailing),
                             in: Circle())
+                .overlay(Circle().strokeBorder(Color.white.opacity(0.3), lineWidth: 0.5))
                 .shadow(color: Color.accentColor.opacity(0.45), radius: 14, y: 6)
-                .scaleEffect(appeared ? 1 : 0.6)
-                .animation(.spring(response: 0.5, dampingFraction: 0.6), value: appeared)
         }
-        .accessibilityHidden(true)
-        .onAppear {
-            if reduceMotion {
-                var instant = Transaction()
-                instant.disablesAnimations = true
-                withTransaction(instant) { appeared = true }
-            } else {
-                appeared = true
-                floating = true
-            }
-        }
+        .scaleEffect(0.6 + 0.4 * easeOutBack(progress(elapsed, delay: 0)))
+    }
+
+    /// 0…1 over 0.65 s, starting `delay` seconds after the page appears.
+    private func progress(_ elapsed: Double, delay: Double) -> Double {
+        min(1, max(0, (elapsed - delay) / 0.65))
+    }
+
+    /// Overshoots slightly before settling, like a spring.
+    private func easeOutBack(_ x: Double) -> Double {
+        let c1 = 1.70158, c3 = c1 + 1
+        return 1 + c3 * pow(x - 1, 3) + c1 * pow(x - 1, 2)
     }
 }
