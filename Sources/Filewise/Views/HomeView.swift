@@ -13,9 +13,9 @@ struct HomeView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 32) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-                Text(library.folder == nil ? "Welcome to Filewise" : greeting).font(Theme.pageTitle)
-                if library.folder != nil {
+            if library.folder != nil {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                    Text(greeting).font(Theme.pageTitle)
                     Text("\(Theme.count(library.files.count, "file")) · \(Theme.bytes(library.summary(for: "Home").bytes)) in \(library.folder?.lastPathComponent ?? "")")
                         .foregroundStyle(.secondary)
                 }

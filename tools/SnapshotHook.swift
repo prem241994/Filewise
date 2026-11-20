@@ -21,7 +21,7 @@ enum SnapshotHook {
             NSApp.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
             var steps = steps
             if let first = steps.first, first.split(separator: ":").dropFirst().first == "Welcome" {
-                try? await Task.sleep(for: .milliseconds(800))
+                try? await Task.sleep(for: .milliseconds(1500))
                 let name = first.split(separator: ":").first.map(String.init) ?? "welcome"
                 capture(to: URL(fileURLWithPath: output).appendingPathComponent("\(name)-\(appearance).png"))
                 steps.removeFirst()
