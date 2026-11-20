@@ -1,125 +1,199 @@
 import AppKit
 import SwiftUI
 
-/// Draws the Filewise app icon: file cards fanned behind a magnifying glass on
-/// an indigo-blue rounded square, in the macOS icon grid (an 824-point body
+/// Draws the Filewise app icon: a friendly owl ("wise") wearing round glasses,
+/// on an indigo rounded square, in the macOS icon grid (an 824-point body
 /// centered on a 1024-point canvas, leaving room for the shadow).
 /// Rendered by scripts/make-icon.sh; not part of the app.
 struct AppIconView: View {
-    private let body824: CGFloat = 824
-    private let radius: CGFloat = 185
-
     var body: some View {
         ZStack {
             plate
-            cards
-            magnifier
+            owl.offset(y: 34)
+            sparkles
         }
         .frame(width: 1024, height: 1024)
     }
 
+    // MARK: - Palette
+
+    private static func rgb(_ r: Double, _ g: Double, _ b: Double) -> Color { Color(red: r, green: g, blue: b) }
+    private let indigo = rgb(0.20, 0.16, 0.58)
+    private let feather = LinearGradient(colors: [rgb(1.0, 0.70, 0.30), rgb(0.97, 0.47, 0.20)],
+                                         startPoint: .top, endPoint: .bottom)
+    private let darkFeather = LinearGradient(colors: [rgb(0.93, 0.48, 0.18), rgb(0.80, 0.33, 0.14)],
+                                             startPoint: .top, endPoint: .bottom)
+    private let cream = rgb(1.0, 0.90, 0.74)
+    private let amber = rgb(0.98, 0.66, 0.16)
+
     // MARK: - Background
 
     private var plate: some View {
-        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 185, style: .continuous)
         return ZStack {
-            shape.fill(LinearGradient(colors: [Color(red: 0.42, green: 0.45, blue: 1.0),
-                                               Color(red: 0.25, green: 0.27, blue: 0.86),
-                                               Color(red: 0.16, green: 0.15, blue: 0.58)],
+            shape.fill(LinearGradient(colors: [Self.rgb(0.42, 0.36, 1.0), Self.rgb(0.28, 0.22, 0.82),
+                                               Self.rgb(0.17, 0.13, 0.52)],
                                       startPoint: .top, endPoint: .bottom))
-            // Soft glows that echo the welcome page.
-            Circle().fill(Color(red: 1.0, green: 0.45, blue: 0.70).opacity(0.45))
-                .frame(width: 520).blur(radius: 120).offset(x: 260, y: -250)
-            Circle().fill(Color(red: 0.25, green: 0.85, blue: 0.85).opacity(0.35))
-                .frame(width: 520).blur(radius: 130).offset(x: -280, y: 300)
-            // Top sheen.
-            shape.fill(LinearGradient(colors: [.white.opacity(0.22), .clear],
-                                      startPoint: .top, endPoint: .center))
+            Circle().fill(Self.rgb(1.0, 0.45, 0.72).opacity(0.40))
+                .frame(width: 520).blur(radius: 120).offset(x: 280, y: -280)
+            Circle().fill(Self.rgb(0.25, 0.85, 0.90).opacity(0.30))
+                .frame(width: 520).blur(radius: 130).offset(x: -300, y: 320)
+            shape.fill(LinearGradient(colors: [.white.opacity(0.22), .clear], startPoint: .top, endPoint: .center))
             shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.45), .white.opacity(0.05)],
                                               startPoint: .top, endPoint: .bottom), lineWidth: 3)
         }
-        .frame(width: body824, height: body824)
+        .frame(width: 824, height: 824)
         .clipShape(shape)
         .shadow(color: .black.opacity(0.35), radius: 22, y: 14)
     }
 
-    // MARK: - File cards
+    // MARK: - Owl
 
-    private var cards: some View {
+    private var owl: some View {
         ZStack {
-            card(accent: Color(red: 0.13, green: 0.78, blue: 0.80), symbol: "doc.text.fill")
-                .rotationEffect(.degrees(-16)).offset(x: -150, y: -40)
-            card(accent: Color(red: 1.0, green: 0.58, blue: 0.20), symbol: "music.note")
-                .rotationEffect(.degrees(12)).offset(x: 140, y: -70)
-            card(accent: Color(red: 0.98, green: 0.30, blue: 0.48), symbol: "photo.fill")
-                .rotationEffect(.degrees(-2)).offset(x: -10, y: -120)
+            // Ear tufts, angled outward, behind the head.
+            ForEach([-1.0, 1.0], id: \.self) { side in
+                Tuft()
+                    .fill(darkFeather)
+                    .frame(width: 120, height: 150)
+                    .rotationEffect(.degrees(side * 28))
+                    .offset(x: side * 175, y: -238)
+            }
+            // Body.
+            Ellipse()
+                .fill(feather)
+                .frame(width: 520, height: 580)
+                .shadow(color: .black.opacity(0.28), radius: 20, y: 12)
+            // Wings.
+            ForEach([-1.0, 1.0], id: \.self) { side in
+                Ellipse()
+                    .fill(darkFeather)
+                    .frame(width: 150, height: 300)
+                    .rotationEffect(.degrees(side * -14))
+                    .offset(x: side * 232, y: 92)
+            }
+            belly
+            face
+            feet
         }
-        .offset(y: -10)
     }
 
-    private func card(accent: Color, symbol: String) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 34, style: .continuous)
-        return VStack(spacing: 0) {
-            ZStack {
-                accent
-                Image(systemName: symbol)
-                    .font(.system(size: 64, weight: .bold))
-                    .foregroundStyle(.white)
+    private var belly: some View {
+        ZStack {
+            Ellipse().fill(cream).frame(width: 300, height: 250)
+            // Feather marks: two rows of small arcs.
+            ForEach(0..<5, id: \.self) { index in
+                let row = index < 3 ? 0 : 1
+                let column = row == 0 ? Double(index) - 1 : Double(index - 3) - 0.5
+                FeatherMark()
+                    .stroke(Self.rgb(0.93, 0.55, 0.25).opacity(0.38), style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                    .frame(width: 56, height: 26)
+                    .offset(x: column * 74, y: row == 0 ? -30 : 34)
             }
-            .frame(height: 140)
-            VStack(alignment: .leading, spacing: 18) {
-                Capsule().fill(Color.black.opacity(0.16)).frame(width: 170, height: 18)
-                Capsule().fill(Color.black.opacity(0.10)).frame(width: 130, height: 18)
-                Capsule().fill(Color.black.opacity(0.10)).frame(width: 150, height: 18)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 30)
-            .padding(.top, 30)
-            Spacer(minLength: 0)
         }
-        .frame(width: 250, height: 320)
-        .background(Color.white)
-        .clipShape(shape)
-        .shadow(color: .black.opacity(0.28), radius: 18, y: 10)
+        .offset(y: 152)
     }
 
-    // MARK: - Magnifying glass
-
-    private var magnifier: some View {
-        let lens: CGFloat = 360
-        let ring: CGFloat = 46
-        return ZStack {
-            // Handle, behind the ring, pointing to the lower right.
-            RoundedRectangle(cornerRadius: 36, style: .continuous)
-                .fill(LinearGradient(colors: [Color(white: 0.98), Color(white: 0.82)],
-                                     startPoint: .leading, endPoint: .trailing))
-                .frame(width: 78, height: 230)
-                .shadow(color: .black.opacity(0.3), radius: 12, y: 8)
-                .offset(y: lens / 2 + 95)
-                .rotationEffect(.degrees(-45))
-            // Frosted glass: opaque so the lens reads at small sizes.
-            Circle()
-                .fill(LinearGradient(colors: [Color.white,
-                                              Color(red: 0.90, green: 0.91, blue: 1.0)],
-                                     startPoint: .topLeading, endPoint: .bottomTrailing))
-                .frame(width: lens - ring, height: lens - ring)
-            Image(systemName: "sparkle")
-                .font(.system(size: 150, weight: .bold))
-                .foregroundStyle(LinearGradient(colors: [Color(red: 0.45, green: 0.42, blue: 1.0),
-                                                         Color(red: 0.22, green: 0.22, blue: 0.80)],
-                                                startPoint: .top, endPoint: .bottom))
-            Image(systemName: "sparkle")
-                .font(.system(size: 46, weight: .bold))
-                .foregroundStyle(Color(red: 1.0, green: 0.45, blue: 0.62))
-                .offset(x: 88, y: -78)
-            Circle()
-                .strokeBorder(LinearGradient(colors: [.white, Color(white: 0.86)],
-                                             startPoint: .topLeading, endPoint: .bottomTrailing),
-                              lineWidth: ring)
-                .frame(width: lens, height: lens)
-                .shadow(color: .black.opacity(0.3), radius: 16, y: 10)
+    private var face: some View {
+        ZStack {
+            // Facial disc: two soft circles that meet in a V between the eyes.
+            ForEach([-1.0, 1.0], id: \.self) { side in
+                Circle().fill(cream).frame(width: 262, height: 262).offset(x: side * 108, y: -84)
+            }
+            // Glasses: two lenses and a bridge.
+            ForEach([-1.0, 1.0], id: \.self) { side in
+                eye(side: side).offset(x: side * 112, y: -86)
+            }
+            Capsule().fill(indigo).frame(width: 46, height: 20).offset(y: -96)
+            // Beak.
+            Beak()
+                .fill(LinearGradient(colors: [amber, Self.rgb(0.90, 0.48, 0.10)], startPoint: .top, endPoint: .bottom))
+                .frame(width: 66, height: 70)
+                .offset(y: 20)
         }
-        .offset(x: 10, y: 70)
+    }
+
+    private func eye(side: Double) -> some View {
+        ZStack {
+            Circle().fill(Color.white).frame(width: 186, height: 186)
+            Circle().fill(Self.rgb(0.16, 0.13, 0.38)).frame(width: 86, height: 86).offset(x: side * -12, y: 8)
+            Circle().fill(Color.white).frame(width: 28, height: 28).offset(x: side * -26, y: -8)
+            Circle().strokeBorder(indigo, lineWidth: 24).frame(width: 212, height: 212)
+            // A shine on the frame, upper left.
+            Circle()
+                .trim(from: 0.56, to: 0.68)
+                .stroke(Color.white.opacity(0.75), style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                .frame(width: 200, height: 200)
+        }
+    }
+
+    private var feet: some View {
+        HStack(spacing: 70) {
+            ForEach(0..<2, id: \.self) { _ in
+                HStack(spacing: 8) {
+                    ForEach(0..<3, id: \.self) { _ in
+                        Capsule().fill(amber).frame(width: 22, height: 44)
+                    }
+                }
+            }
+        }
+        .offset(y: 290)
+    }
+
+    private var sparkles: some View {
+        ZStack {
+            Image(systemName: "sparkle")
+                .font(.system(size: 82, weight: .bold))
+                .foregroundStyle(.white)
+                .offset(x: 290, y: 170)
+            Image(systemName: "sparkle")
+                .font(.system(size: 44, weight: .bold))
+                .foregroundStyle(.white.opacity(0.85))
+                .offset(x: 238, y: 262)
+            Image(systemName: "sparkle")
+                .font(.system(size: 40, weight: .bold))
+                .foregroundStyle(.white.opacity(0.7))
+                .offset(x: -300, y: -250)
+        }
+    }
+}
+
+/// An ear tuft: a leaf shape with a rounded base and a soft point.
+private struct Tuft: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { p in
+            p.move(to: CGPoint(x: rect.midX, y: rect.minY))
+            p.addQuadCurve(to: CGPoint(x: rect.maxX, y: rect.maxY),
+                           control: CGPoint(x: rect.maxX, y: rect.midY * 0.8))
+            p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+            p.addQuadCurve(to: CGPoint(x: rect.midX, y: rect.minY),
+                           control: CGPoint(x: rect.minX, y: rect.midY * 0.8))
+        }
+    }
+}
+
+/// A downward arc, like a feather's edge.
+private struct FeatherMark: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { p in
+            p.move(to: CGPoint(x: rect.minX, y: rect.minY))
+            p.addQuadCurve(to: CGPoint(x: rect.maxX, y: rect.minY), control: CGPoint(x: rect.midX, y: rect.maxY * 1.6))
+        }
+    }
+}
+
+/// A small rounded beak pointing down.
+private struct Beak: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { p in
+            p.move(to: CGPoint(x: rect.minX, y: rect.minY + rect.height * 0.15))
+            p.addQuadCurve(to: CGPoint(x: rect.maxX, y: rect.minY + rect.height * 0.15),
+                           control: CGPoint(x: rect.midX, y: rect.minY - rect.height * 0.1))
+            p.addQuadCurve(to: CGPoint(x: rect.midX, y: rect.maxY),
+                           control: CGPoint(x: rect.maxX * 0.85, y: rect.height * 0.6))
+            p.addQuadCurve(to: CGPoint(x: rect.minX, y: rect.minY + rect.height * 0.15),
+                           control: CGPoint(x: rect.width * 0.15, y: rect.height * 0.6))
+        }
     }
 }
 
