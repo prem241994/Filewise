@@ -8,8 +8,16 @@ import SwiftUI
 @MainActor
 final class Library: ObservableObject {
     @Published var folder: URL? {
-        didSet { folderPrefixes = folder.map(PathPrefixes.forFolder) ?? [] }
+        didSet {
+            folderPrefixes = folder.map(PathPrefixes.forFolder) ?? []
+            guard folder != oldValue else { return }
+            // In the sandbox, Trash, Undo, Quick Look, and the folder watcher
+            // all need access, so it is held while the folder is selected.
+            if accessingFolder { oldValue?.stopAccessingSecurityScopedResource() }
+            accessingFolder = folder?.startAccessingSecurityScopedResource() ?? false
+        }
     }
+    private var accessingFolder = false
     /// The selected folder's path, plus its canonical form when they differ.
     private var folderPrefixes: [String] = []
     @Published var customFolder: URL?
@@ -77,9 +85,8 @@ final class Library: ObservableObject {
     private var searchTask: Task<Void, Never>?
     private var visibleGeneration = 0
     private var changesDuringScan = false
-    private static let folderBookmarkKey = "filewise.selectedFolderBookmark"
-    private static let customFolderBookmarkKey = "filewise.customFolderBookmark"
-    private static let bookmarkHasSecurityScopeKey = "filewise.bookmarkHasSecurityScope"
+    private static let folderPathKey = "filewise.selectedFolderPath"
+    private static let customFolderPathKey = "filewise.customFolderPath"
     private static let recentSearchesKey = "filewise.recentSearches"
     private static let scanDatesKey = "filewise.successfulScanDates"
 
@@ -90,19 +97,14 @@ final class Library: ObservableObject {
         loadRecentSearches()
         updateVisible()
         guard ProcessInfo.processInfo.environment["FILEWISE_TEST_DATABASE_DIRECTORY"] == nil else { return }
-        if let customData = UserDefaults.standard.data(forKey: Self.customFolderBookmarkKey) {
-            var stale = false
-            customFolder = try? URL(resolvingBookmarkData: customData, options: [], relativeTo: nil, bookmarkDataIsStale: &stale)
+        if let customPath = UserDefaults.standard.string(forKey: Self.customFolderPathKey) {
+            customFolder = FolderAccess.url(forPath: customPath)
         }
-        guard let data = UserDefaults.standard.data(forKey: Self.folderBookmarkKey) else { return }
-        let scoped = UserDefaults.standard.bool(forKey: Self.bookmarkHasSecurityScopeKey)
-        var stale = false
-        guard let url = try? URL(resolvingBookmarkData: data,
-                                  options: scoped ? [.withSecurityScope] : [],
-                                  relativeTo: nil,
-                                  bookmarkDataIsStale: &stale) else { return }
+        guard let path = UserDefaults.standard.string(forKey: Self.folderPathKey),
+              let url = FolderAccess.url(forPath: path) else { return }
         if customFolder == nil { customFolder = url }
-        if stale { saveFolder(url) }
+        // A moved folder resolves to its new location.
+        if url.standardizedFileURL.path != path { saveFolder(url) }
         Task { self.scan(url) }
     }
 
@@ -330,32 +332,34 @@ final class Library: ObservableObject {
         panel.allowsMultipleSelection = false
         panel.prompt = "Scan Folder"
         if panel.runModal() == .OK, let url = panel.url {
+            FolderAccess.remember(url)
             rememberCustomFolder(url)
             saveFolder(url)
             scan(url)
         }
     }
 
+    /// Selects a sidebar location or a dropped folder. In the sandbox, a
+    /// folder the user has not granted yet is requested with an open panel.
     func selectLocation(_ url: URL, rememberCustom: Bool = false) {
-        if rememberCustom { rememberCustomFolder(url) }
-        guard folder?.path != url.path else { return }
-        saveFolder(url)
-        scan(url)
+        guard folder?.path != url.path || rememberCustom else { return }
+        guard let granted = FolderAccess.grantedURL(for: url) else {
+            bannerMessage = "Filewise can only scan “\(url.lastPathComponent)” after you allow access."
+            return
+        }
+        if rememberCustom || granted.path != url.path { rememberCustomFolder(granted) }
+        guard folder?.path != granted.path else { return }
+        saveFolder(granted)
+        scan(granted)
     }
 
     private func rememberCustomFolder(_ url: URL) {
         customFolder = url
-        if let bookmark = try? url.bookmarkData() {
-            UserDefaults.standard.set(bookmark, forKey: Self.customFolderBookmarkKey)
-        }
+        UserDefaults.standard.set(url.standardizedFileURL.path, forKey: Self.customFolderPathKey)
     }
 
     private func saveFolder(_ url: URL) {
-        let scopedData = try? url.bookmarkData(options: [.withSecurityScope])
-        let data = scopedData ?? (try? url.bookmarkData())
-        guard let data else { return }
-        UserDefaults.standard.set(data, forKey: Self.folderBookmarkKey)
-        UserDefaults.standard.set(scopedData != nil, forKey: Self.bookmarkHasSecurityScopeKey)
+        UserDefaults.standard.set(url.standardizedFileURL.path, forKey: Self.folderPathKey)
     }
 
     // MARK: - Settings

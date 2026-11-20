@@ -1,6 +1,6 @@
 # Filewise
 
-Filewise is a native Mac app for finding files and reviewing cleanup candidates in one place. Its dashboard has a single search field, library categories, cleanup cards, and recent files. The development build scans a folder chosen by the user, searches file metadata, and identifies identical files. File metadata is stored in a local SQLite index under Application Support so results can appear from the previous scan while a background refresh runs.
+Filewise is a native Mac app for finding files and reviewing cleanup candidates in one place. Its dashboard has a single search field, library categories, cleanup cards, and recent files. The development build scans a folder chosen by the user, searches file metadata, and identifies identical files. The app runs in the App Sandbox: it reads only folders you choose, drop on the window, or allow when first opening Desktop or Documents from the sidebar (Downloads needs no prompt). File metadata is stored in a local SQLite index in the app container's Application Support folder so results can appear from the previous scan while a background refresh runs.
 
 ## Open in VS Code
 

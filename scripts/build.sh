@@ -11,5 +11,6 @@ swiftc "${swift_flags[@]}" "${app_frameworks[@]}" "${core_link_flags[@]}" \
     "$project_dir"/Sources/Filewise/**/*.swift \
     -o "$app_dir/Contents/MacOS/Filewise"
 
-codesign --force --deep --sign - "$app_dir"
+# Sandboxed, as the App Store requires. Tests and the snapshot build are not.
+codesign --force --sign - --entitlements "$project_dir/Resources/Filewise.entitlements" "$app_dir"
 echo "Built $app_dir"

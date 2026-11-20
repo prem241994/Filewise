@@ -9,9 +9,9 @@ Filewise is a native macOS (14+) SwiftUI app that indexes a user-chosen folder i
 Swift Package Manager is **not used** because it is broken on the development Mac. `Package.swift` mirrors the build but nothing runs it. Every build goes through zsh scripts that call `swiftc` directly, using shared settings in `scripts/common.sh`. If you add a module, source folder, framework, or compiler flag, update both `scripts/common.sh` and `Package.swift`.
 
 ```sh
-./scripts/build.sh                 # builds and ad-hoc signs .build/Filewise.app
+./scripts/build.sh                 # builds .build/Filewise.app, ad-hoc signed with the sandbox entitlements
 open .build/Filewise.app
-zsh scripts/package.sh             # build + codesign verify + .build/Filewise-local.zip (what CI runs)
+zsh scripts/package.sh             # build + codesign/entitlement checks + .build/Filewise-local.zip (what CI runs)
 ```
 
 If the active SDK doesn't match the compiler (it doesn't on this Mac), set this first:
@@ -33,7 +33,7 @@ There is no XCTest. Each test is a standalone `@main` harness in `tests/`. It co
 
 CI (`.github/workflows/macos.yml`) runs `package.sh` plus the duplicates, index-health, scan-search, and trash-safety scripts. To add a test, write `tests/FooHarness.swift` and a matching `scripts/test-foo.sh` modeled on an existing one, then add a step to the workflow.
 
-Harnesses that touch the index must set `FILEWISE_TEST_DATABASE_DIRECTORY` to a temp dir (the scripts already do). Otherwise `FileIndex` writes to the real `~/Library/Application Support/Filewise/index.sqlite`.
+Harnesses that touch the index must set `FILEWISE_TEST_DATABASE_DIRECTORY` to a temp dir (the scripts already do). Otherwise `FileIndex` writes to the real index in `~/Library/Application Support/Filewise/`. The sandboxed app uses its container instead, at `~/Library/Containers/app.filewise.desktop/Data/Library/Application Support/Filewise/`.
 
 ### UI verification
 
@@ -63,6 +63,15 @@ Two modules:
   - `ViewModels/Library.swift` is the central `@MainActor ObservableObject`. It owns the selected folder (a security-scoped bookmark), scan, search, selection, trash, and undo state. Blocking work goes through `Library.background { … }` (a `Task.detached`), and only the results come back to the main actor. Each scan or trash run gets a `ScanToken` and an ID, and results from an older run are dropped (`isCurrent`). Search is debounced in a cancellable `searchTask`.
   - `Views/` uses a `NavigationSplitView` with a sidebar, a Home dashboard (library and cleanup cards), a sortable `Table` of results, and a detail inspector. Shared styling and file actions live in `Views/Theme.swift`.
   - `Services/` holds the app-side caches (icons, QuickLook thumbnails).
+
+### App Sandbox
+
+`build.sh` signs the app with `Resources/Filewise.entitlements`: sandbox, user-selected read-write, app-scope bookmarks, and Downloads read-write. There is no network entitlement, and `package.sh` fails the build if one appears or the sandbox entitlement goes missing. Test harnesses and the snapshot build are **not** sandboxed, so sandbox-only behavior has to be checked by hand in `.build/Filewise.app`.
+
+- `Services/FolderAccess.swift` handles folder access. Every granted folder is stored as a security-scoped bookmark keyed by path. `grantedURL(for:)` returns a readable URL, or opens an open panel aimed at the folder to ask for access. Outside the sandbox it is a no-op. Library saves only folder *paths* and resolves them through `FolderAccess`.
+- `Library.folder`'s `didSet` holds `startAccessingSecurityScopedResource()` for as long as a folder is selected, because Trash, Undo, Quick Look, thumbnails, and the watcher all need it. Don't move file work outside the selected folder without a grant.
+- Use `FolderAccess.homeDirectory` for the user's real home. In the sandbox, `NSHomeDirectory()` and `FileManager.urls(for:in:)` point into the container.
+- Testing confirmed that Undo restore from `~/.Trash` works under the sandbox, both in the same launch and after a relaunch, without extra bookmarks for the trashed files. It has not been checked for folders on other volumes, which use `/Volumes/…/.Trashes`.
 
 The integration harnesses drive `Library` itself, which is why they compile the ViewModels sources together with AppKit and SwiftUI.
 

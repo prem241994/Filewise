@@ -66,17 +66,13 @@ struct SidebarView: View {
     }
 
     private var locations: [(name: String, icon: String, url: URL)] {
-        let fm = FileManager.default
-        var result: [(name: String, icon: String, url: URL)] = []
-        if let url = fm.urls(for: .desktopDirectory, in: .userDomainMask).first {
-            result.append(("Desktop", "menubar.dock.rectangle", url))
-        }
-        if let url = fm.urls(for: .downloadsDirectory, in: .userDomainMask).first {
-            result.append(("Downloads", "arrow.down.circle", url))
-        }
-        if let url = fm.urls(for: .documentDirectory, in: .userDomainMask).first {
-            result.append(("Documents", "doc.text", url))
-        }
+        // The real home folder; in the sandbox FileManager points into the container.
+        let home = FolderAccess.homeDirectory
+        var result: [(name: String, icon: String, url: URL)] = [
+            ("Desktop", "menubar.dock.rectangle", home.appendingPathComponent("Desktop", isDirectory: true)),
+            ("Downloads", "arrow.down.circle", home.appendingPathComponent("Downloads", isDirectory: true)),
+            ("Documents", "doc.text", home.appendingPathComponent("Documents", isDirectory: true)),
+        ]
         if let custom = library.customFolder, !result.contains(where: { $0.url.path == custom.path }) {
             result.append((custom.lastPathComponent, "folder", custom))
         }

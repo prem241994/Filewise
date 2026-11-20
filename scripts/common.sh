@@ -36,4 +36,4 @@ build_core() {
 }
 
 # Sources of the app's view-model layer, which the integration tests drive.
-view_model_sources=("$project_dir"/Sources/Filewise/ViewModels/*.swift)
+view_model_sources=("$project_dir"/Sources/Filewise/ViewModels/*.swift "$project_dir"/Sources/Filewise/Services/FolderAccess.swift)

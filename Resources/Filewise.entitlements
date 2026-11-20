@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- App Store builds must be sandboxed. There is deliberately no network entitlement. -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <!-- Folders the user chooses in an open panel or drops on the window; read-write for Trash and Undo. -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+    <!-- Security-scoped bookmarks, so chosen folders reopen after relaunch. -->
+    <key>com.apple.security.files.bookmarks.app-scope</key>
+    <true/>
+    <!-- Downloads without asking: the main source of old and duplicate files. -->
+    <key>com.apple.security.files.downloads.read-write</key>
+    <true/>
+</dict>
+</plist>
