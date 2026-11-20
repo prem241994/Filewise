@@ -100,7 +100,7 @@ struct WelcomeView: View {
             HStack(spacing: Theme.Spacing.m) {
                 assurance("No account needed")
                 assurance("Works offline")
-                assurance("Undo anytime")
+                assurance("Undo for Trash")
             }
             .padding(.top, Theme.Spacing.xxs)
         }
