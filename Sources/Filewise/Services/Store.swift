@@ -12,23 +12,30 @@ struct PaywallRequest: Identifiable {
 }
 
 /// The free trial and the one-time unlock, through StoreKit 2 with no server.
-/// The trial starts at the App Store's original download date, so reinstalling
-/// does not restart it. Cleanup actions ask `requireUnlock` first.
+///
+/// As App Review Guideline 3.1.1 describes, the trial is a free non-consumable
+/// ("7-day Trial") that the user starts after the app has shown its length,
+/// what it gates, and the price. Its purchase date starts the 7 days, and it
+/// stays in the user's purchases, so reinstalling does not restart it. Outside
+/// an App Store install (development builds) the trial is kept locally.
+/// Cleanup actions ask `requireUnlock` first.
 @MainActor
 final class Store: ObservableObject {
     @Published private(set) var status: LicenseStatus = .checking
     @Published private(set) var product: Product?
+    @Published private(set) var trialProduct: Product?
     @Published private(set) var isPurchasing = false
     @Published var purchaseError: String?
     @Published var paywall: PaywallRequest?
 
     private var trialStart: Date?
     private var unlocked = false
+    private var checked = false
     private var updates: Task<Void, Never>?
-    private static let firstLaunchKey = "filewise.firstLaunchDate"
+    private static let localTrialKey = "filewise.localTrialStart"
 
     #if FILEWISE_LICENSE_TESTING
-    /// FILEWISE_LICENSE=trial:<days>|expired|unlocked replaces StoreKit in
+    /// FILEWISE_LICENSE=new|trial:<days>|expired|unlocked replaces StoreKit in
     /// development builds (built with FILEWISE_LICENSE_TESTING=1).
     private let override = ProcessInfo.processInfo.environment["FILEWISE_LICENSE"]
     #endif
@@ -59,11 +66,19 @@ final class Store: ObservableObject {
         }
     }
 
+    /// The unlock price in the user's currency, or empty when the App Store
+    /// has not answered.
     var priceText: String {
         #if FILEWISE_LICENSE_TESTING
         if override != nil { return "$4.99" }
         #endif
         return product?.displayPrice ?? ""
+    }
+
+    /// The disclosure App Review requires before the trial starts.
+    var trialTerms: String {
+        let price = priceText.isEmpty ? "a one-time purchase" : "a one-time \(priceText) purchase"
+        return "Try every feature free for \(License.trialDays) days. After that, moving files to the Trash and selecting extra copies need \(price). Searching, browsing, suggestions, and Undo stay free."
     }
 
     /// Runs `action` when cleanup is allowed; otherwise shows the unlock sheet.
@@ -87,11 +102,43 @@ final class Store: ObservableObject {
     }
 
     func refresh() async {
-        trialStart = await Self.originalDownloadDate() ?? Self.firstLaunchDate()
-        unlocked = await Self.ownsUnlock()
+        let owned = await Self.ownedProducts()
+        unlocked = owned[License.unlockProductID] != nil
+        trialStart = owned[License.trialProductID]
+            ?? UserDefaults.standard.object(forKey: Self.localTrialKey) as? Date
+        checked = true
         updateStatus()
-        if product == nil {
-            product = try? await Product.products(for: [License.unlockProductID]).first
+        if product == nil || trialProduct == nil,
+           let products = try? await Product.products(for: [License.unlockProductID, License.trialProductID]) {
+            product = products.first { $0.id == License.unlockProductID }
+            trialProduct = products.first { $0.id == License.trialProductID }
+        }
+    }
+
+    /// Starts the 7-day trial through the free "7-day Trial" purchase.
+    func startTrial() async {
+        #if FILEWISE_LICENSE_TESTING
+        if override != nil {
+            status = .trial(daysLeft: License.trialDays)
+            paywall = nil
+            return
+        }
+        #endif
+        purchaseError = nil
+        if trialProduct == nil { await refresh() }
+        guard let trialProduct else {
+            // Not an App Store install, or the App Store is unreachable: keep
+            // the trial locally so the app still works.
+            UserDefaults.standard.set(Date(), forKey: Self.localTrialKey)
+            trialStart = Date()
+            updateStatus()
+            paywall = nil
+            return
+        }
+        if let transaction = await buy(trialProduct) {
+            trialStart = transaction.purchaseDate
+            updateStatus()
+            paywall = nil
         }
     }
 
@@ -99,7 +146,7 @@ final class Store: ObservableObject {
         #if FILEWISE_LICENSE_TESTING
         if override != nil {
             unlocked = true
-            updateStatus()
+            status = .unlocked
             paywall = nil
             return
         }
@@ -110,26 +157,10 @@ final class Store: ObservableObject {
             purchaseError = "The App Store can’t be reached right now. Check your internet connection and try again."
             return
         }
-        isPurchasing = true
-        defer { isPurchasing = false }
-        do {
-            switch try await product.purchase() {
-            case .success(.verified(let transaction)):
-                await transaction.finish()
-                unlocked = true
-                updateStatus()
-                paywall = nil
-            case .success(.unverified):
-                purchaseError = "The App Store couldn’t verify this purchase. Try Restore Purchase."
-            case .pending:
-                purchaseError = "Your purchase is waiting for approval. Filewise unlocks as soon as it’s approved."
-            case .userCancelled:
-                break
-            @unknown default:
-                break
-            }
-        } catch {
-            purchaseError = "The purchase didn’t go through: \(error.localizedDescription)"
+        if await buy(product) != nil {
+            unlocked = true
+            updateStatus()
+            paywall = nil
         }
     }
 
@@ -158,38 +189,47 @@ final class Store: ObservableObject {
 
     private func updateStatus() {
         #if FILEWISE_LICENSE_TESTING
-        if override != nil, !unlocked { return }
+        if override != nil { return }
         #endif
-        status = License.status(trialStart: trialStart, unlocked: unlocked)
+        status = License.status(trialStart: trialStart, unlocked: unlocked, checked: checked)
     }
 
     // MARK: - StoreKit
 
-    /// When this Apple Account first downloaded Filewise. Nil outside an App
-    /// Store install (development builds).
-    private static func originalDownloadDate() async -> Date? {
-        guard let result = try? await AppTransaction.shared, case .verified(let app) = result else { return nil }
-        return app.originalPurchaseDate
+    /// Purchases `product`, returning the verified transaction, or nil after
+    /// showing why not (or if the user cancelled).
+    private func buy(_ product: Product) async -> Transaction? {
+        isPurchasing = true
+        defer { isPurchasing = false }
+        do {
+            switch try await product.purchase() {
+            case .success(.verified(let transaction)):
+                await transaction.finish()
+                return transaction
+            case .success(.unverified):
+                purchaseError = "The App Store couldn’t verify this purchase. Try Restore Purchase."
+            case .pending:
+                purchaseError = "Your purchase is waiting for approval. Filewise updates as soon as it’s approved."
+            case .userCancelled:
+                break
+            @unknown default:
+                break
+            }
+        } catch {
+            purchaseError = "The purchase didn’t go through: \(error.localizedDescription)"
+        }
+        return nil
     }
 
-    private static func ownsUnlock() async -> Bool {
+    /// The purchase date of each Filewise product this Apple Account owns.
+    private static func ownedProducts() async -> [String: Date] {
+        var owned: [String: Date] = [:]
         for await result in Transaction.currentEntitlements {
-            if case .verified(let transaction) = result,
-               transaction.productID == License.unlockProductID,
-               transaction.revocationDate == nil {
-                return true
+            if case .verified(let transaction) = result, transaction.revocationDate == nil {
+                owned[transaction.productID] = transaction.purchaseDate
             }
         }
-        return false
-    }
-
-    /// The trial start when the App Store has no record, such as a build run
-    /// outside the App Store. Saved on first use.
-    private static func firstLaunchDate() -> Date {
-        if let date = UserDefaults.standard.object(forKey: firstLaunchKey) as? Date { return date }
-        let now = Date()
-        UserDefaults.standard.set(now, forKey: firstLaunchKey)
-        return now
+        return owned
     }
 
     #if FILEWISE_LICENSE_TESTING
@@ -199,6 +239,8 @@ final class Store: ObservableObject {
             status = .unlocked
         } else if value == "expired" {
             status = .expired
+        } else if value == "new" {
+            status = .notStarted
         } else if value.hasPrefix("trial:"), let days = Int(value.dropFirst(6)) {
             status = .trial(daysLeft: days)
         }

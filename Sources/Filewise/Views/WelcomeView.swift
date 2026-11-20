@@ -1,3 +1,4 @@
+import FilewiseCore
 import SwiftUI
 
 /// The first-run page, shown on Home until a folder is chosen. It explains
@@ -5,6 +6,7 @@ import SwiftUI
 /// without asking, as a one-click start.
 struct WelcomeView: View {
     @ObservedObject var library: Library
+    @EnvironmentObject private var store: Store
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
@@ -16,10 +18,11 @@ struct WelcomeView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
             hero.entrance(appeared, order: 0)
+            if store.status == .notStarted { trialOffer.entrance(appeared, order: 1) }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: Theme.Spacing.l, alignment: .top)],
                       spacing: Theme.Spacing.l) { features }
-                .entrance(appeared, order: 1)
-            dropZone.entrance(appeared, order: 2)
+                .entrance(appeared, order: 2)
+            dropZone.entrance(appeared, order: 3)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear {
@@ -130,6 +133,42 @@ struct WelcomeView: View {
             Circle().fill(Color.indigo.opacity(strength * 0.8)).frame(width: 220).blur(radius: 70)
                 .offset(x: -320, y: 140)
         }
+    }
+
+    // MARK: - Trial
+
+    /// The trial's length, what it gates, and the price, shown before it
+    /// starts as App Review requires.
+    private var trialOffer: some View {
+        HStack(spacing: Theme.Spacing.l) {
+            Image(systemName: "gift.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 38, height: 38)
+                .background(LinearGradient(colors: [.orange, .pink], startPoint: .topLeading, endPoint: .bottomTrailing),
+                            in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(License.trialDays)-day free trial").font(.headline)
+                Text(store.trialTerms)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: Theme.Spacing.s)
+            Button("Start Free Trial") { Task { await store.startTrial() } }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .disabled(store.isPurchasing)
+        }
+        .padding(Theme.Spacing.l)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LinearGradient(colors: [Color.orange.opacity(colorScheme == .dark ? 0.20 : 0.10),
+                                            Color.pink.opacity(colorScheme == .dark ? 0.08 : 0.03)],
+                                   startPoint: .leading, endPoint: .trailing),
+                    in: RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous)
+            .strokeBorder(Color.orange.opacity(0.2), lineWidth: 1))
     }
 
     // MARK: - Features

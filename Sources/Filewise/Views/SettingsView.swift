@@ -66,7 +66,7 @@ struct SettingsView: View {
                 LabeledContent("Status", value: licenseText)
                 HStack {
                     if store.status != .unlocked {
-                        Button("Unlock Filewise…") { store.showUnlock() }
+                        Button(store.status == .notStarted ? "Start Free Trial…" : "Unlock Filewise…") { store.showUnlock() }
                     }
                     Button("Restore Purchase") { Task { await store.restore() } }
                         .disabled(store.isPurchasing)
@@ -77,7 +77,7 @@ struct SettingsView: View {
             } header: {
                 Text("Purchase")
             } footer: {
-                Text("Searching, browsing, and Undo are always free. Moving files to the Trash needs the one-time unlock after the 7-day trial.")
+                Text("Searching, browsing, and Undo are always free. Moving files to the Trash and selecting extra copies need the 7-day free trial, then a one-time unlock.")
                     .foregroundStyle(.secondary)
             }
 
@@ -101,6 +101,7 @@ struct SettingsView: View {
     private var licenseText: String {
         switch store.status {
         case .checking: "Checking…"
+        case .notStarted: "Free trial not started"
         case .trial(let days): "Free trial, \(Theme.count(days, "day")) left"
         case .expired: "Trial ended"
         case .unlocked: "Unlocked. Thank you!"

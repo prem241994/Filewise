@@ -1,16 +1,24 @@
 import FilewiseCore
 import SwiftUI
 
-/// The unlock sheet, shown when a cleanup action is used after the trial.
-/// It names what the user was about to clean up and keeps the free parts clear.
+/// The unlock sheet, shown when a cleanup action is used before the trial
+/// starts or after it ends. It names what the user was about to clean up and
+/// keeps the free parts clear. Before the trial it offers to start it, with
+/// the terms App Review requires shown first.
 struct PaywallView: View {
     @ObservedObject var store: Store
     let request: PaywallRequest
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
 
+    private var offersTrial: Bool { store.status == .notStarted }
+
     private var title: String {
         if request.trialEnded { return "Your free trial has ended" }
+        if offersTrial {
+            return request.bytes > 0 ? "Start your free trial to clean up \(Theme.bytes(request.bytes))"
+                                     : "Start your free trial"
+        }
         return request.bytes > 0 ? "Unlock Filewise to clean up \(Theme.bytes(request.bytes))" : "Unlock Filewise"
     }
 
@@ -21,6 +29,7 @@ struct PaywallView: View {
                 : "Unlock Filewise once to keep cleaning up."
             return offer + " Searching and browsing stay free."
         }
+        if offersTrial { return store.trialTerms }
         return switch store.status {
         case .trial(let days):
             "Your free trial has \(Theme.count(days, "day")) left. Unlock now to keep cleaning up after it ends."
@@ -110,6 +119,23 @@ struct PaywallView: View {
     }
 
     private var buttons: some View {
+        VStack(spacing: Theme.Spacing.m) {
+            if offersTrial {
+                Button {
+                    Task { await store.startTrial() }
+                } label: {
+                    Text("Start \(License.trialDays)-Day Free Trial").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(store.isPurchasing)
+            }
+            purchaseRow
+        }
+        .controlSize(.large)
+    }
+
+    private var purchaseRow: some View {
         HStack(spacing: Theme.Spacing.m) {
             Button("Restore Purchase") { Task { await store.restore() } }
                 .disabled(store.isPurchasing)
@@ -126,9 +152,9 @@ struct PaywallView: View {
                 .padding(.horizontal, Theme.Spacing.xs)
             }
             .buttonStyle(.borderedProminent)
-            .keyboardShortcut(.defaultAction)
+            .tint(offersTrial ? .secondary : .accentColor)
             .disabled(store.isPurchasing || store.status == .unlocked)
+            .keyboardShortcut(offersTrial ? nil : .defaultAction)
         }
-        .controlSize(.large)
     }
 }

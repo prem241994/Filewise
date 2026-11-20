@@ -101,16 +101,21 @@ struct SidebarView: View {
         .accessibilityHint("Scans this folder")
     }
 
-    /// Days left in the trial. When it has ended, the unlock sheet appears
+    /// The trial offer or the days left. When it has ended, the unlock sheet appears
     /// by itself instead (see ContentView).
     @ViewBuilder private var trialBanner: some View {
-        if case .trial(let days) = store.status {
-            let text = "Trial: \(Theme.count(days, "day")) left"
+        let banner: (text: String, action: String)? = switch store.status {
+        case .trial(let days): ("Trial: \(Theme.count(days, "day")) left", "Unlock")
+        case .notStarted: ("Free \(License.trialDays)-day trial", "Start")
+        default: nil
+        }
+        if let banner {
             HStack(spacing: Theme.Spacing.s) {
-                Image(systemName: "sparkles").foregroundStyle(Color.accentColor)
-                Text(text).lineLimit(1)
+                Image(systemName: store.status == .notStarted ? "gift" : "sparkles").foregroundStyle(Color.accentColor)
+                Text(banner.text).lineLimit(1)
                 Spacer(minLength: Theme.Spacing.xs)
-                Button("Unlock") { store.showUnlock() }
+                // Both open the sheet, which shows the trial terms before it starts.
+                Button(banner.action) { store.showUnlock() }
                     .buttonStyle(.link)
                     .fontWeight(.semibold)
             }

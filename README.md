@@ -50,7 +50,7 @@ Run `./scripts/test-trash-cancellation.sh` to exercise a disposable temporary fo
 
 Run `./scripts/test-scan-search.sh` to test scanning, cancellation, FTS search, missing or restricted folders, and recovery after a folder disappears and returns, using disposable files. Both integration checks use isolated temporary SQLite databases and remove their fixtures afterward.
 
-Run `./scripts/test-license.sh` to check the trial rules: 7 days from the first download, then cleanup actions (Move to Trash, Select Extra Copies) need the one-time unlock while search, browsing, and Undo stay free. To try the trial states in the app, build with `FILEWISE_LICENSE_TESTING=1 ./scripts/build.sh` and launch `.build/Filewise.app/Contents/MacOS/Filewise` with `FILEWISE_LICENSE=trial:3`, `expired`, or `unlocked`; this development override is never in the normal build.
+Run `./scripts/test-license.sh` to check the trial rules: the user starts a 7-day free trial (after the app shows its terms), then cleanup actions (Move to Trash, Select Extra Copies) need the one-time unlock while search, browsing, and Undo stay free. To try the trial states in the app, build with `FILEWISE_LICENSE_TESTING=1 ./scripts/build.sh` and launch `.build/Filewise.app/Contents/MacOS/Filewise` with `FILEWISE_LICENSE=new`, `trial:3`, `expired`, or `unlocked`; this development override is never in the normal build.
 
 Run `./scripts/test-duplicates.sh` to check which copy each "Select Extra Copies" rule keeps (oldest, newest, shortest name, or the copy in a chosen folder).
 
