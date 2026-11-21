@@ -28,6 +28,7 @@ struct HomeView: View {
                 if !library.scanning && library.scanNotice != nil {
                     ScanNoticeView(library: library)
                 }
+                SpaceRingView(library: library)
                 section("Library") {
                     LazyVGrid(columns: grid, spacing: Theme.Spacing.l) {
                         ForEach(Theme.libraryCategories, id: \.self, content: libraryCard)
