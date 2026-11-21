@@ -244,7 +244,7 @@ struct WelcomeView: View {
     }
 }
 
-private extension View {
+extension View {
     /// Fades and lifts a section in, one after another.
     func entrance(_ appeared: Bool, order: Int) -> some View {
         opacity(appeared ? 1 : 0)

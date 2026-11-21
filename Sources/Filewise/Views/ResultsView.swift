@@ -183,6 +183,7 @@ struct ResultsView: View {
                                 }
                                 .accessibilityAction { select(item) }
                                 .fileAccessibilityActions(item, onPreview: onPreview, onTrash: onTrash)
+                                .transition(.scale(scale: 0.85).combined(with: .opacity))
                         }
                     }
                     .padding(.horizontal, Theme.Spacing.page)

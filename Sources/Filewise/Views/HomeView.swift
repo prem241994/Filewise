@@ -11,6 +11,12 @@ struct HomeView: View {
     private let grid = [GridItem(.adaptive(minimum: 200, maximum: 320), spacing: Theme.Spacing.l)]
     private let cleanupCategories = ["Duplicates", "Forgotten Downloads", "Old Screenshots", "Large Files"]
 
+    /// The folder whose Home has already played its entrance, so returning to
+    /// Home from another page doesn't replay it.
+    private static var introPlayedFor: String?
+    @State private var appeared = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         VStack(alignment: .leading, spacing: 32) {
             if library.folder != nil {
@@ -18,6 +24,7 @@ struct HomeView: View {
                     Text(greeting).font(Theme.pageTitle).accessibilityAddTraits(.isHeader)
                     Text("\(Theme.count(library.files.count, "file")) · \(Theme.bytes(library.summary(for: "Home").bytes)) in \(library.folder?.lastPathComponent ?? "")")
                         .foregroundStyle(.secondary)
+                        .contentTransition(.numericText())
                 }
             }
             if library.folder == nil {
@@ -28,13 +35,14 @@ struct HomeView: View {
                 if !library.scanning && library.scanNotice != nil {
                     ScanNoticeView(library: library)
                 }
-                SpaceRingView(library: library)
+                SpaceRingView(library: library).entrance(appeared, order: 0)
                 section("Library") {
                     LazyVGrid(columns: grid, spacing: Theme.Spacing.l) {
                         ForEach(Theme.libraryCategories, id: \.self, content: libraryCard)
                     }
                 }
-                recentMedia
+                .entrance(appeared, order: 1)
+                recentMedia.entrance(appeared, order: 2)
                 section("Clean Up", seeAll: "Clean Up") {
                     // One row of four when it fits, otherwise a balanced 2×2 grid.
                     ViewThatFits(in: .horizontal) {
@@ -47,7 +55,8 @@ struct HomeView: View {
                         }
                     }
                 }
-                downloadedFrom
+                .entrance(appeared, order: 3)
+                downloadedFrom.entrance(appeared, order: 4)
                 section("Recent Files", seeAll: "Recents") {
                     if recentFiles.isEmpty {
                         Text(library.scanning ? "Indexing your files…" : "No files found")
@@ -65,9 +74,27 @@ struct HomeView: View {
                         .frame(minWidth: 0, idealWidth: 300, maxWidth: .infinity)
                     }
                 }
+                .entrance(appeared, order: 5)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .onAppear(perform: playIntro)
+        .onChange(of: library.folder) { _, _ in playIntro() }
+    }
+
+    /// Lets the sections rise in once per folder; afterwards (or with Reduce
+    /// Motion) they show at once.
+    private func playIntro() {
+        let path = library.folder?.path
+        if reduceMotion || path == nil || Self.introPlayedFor == path {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { appeared = true }
+            return
+        }
+        Self.introPlayedFor = path
+        appeared = false
+        DispatchQueue.main.async { appeared = true }
     }
 
     private var greeting: String {
@@ -293,6 +320,7 @@ private struct LibraryCard: View {
                 Spacer(minLength: Theme.Spacing.l)
                 Text(title).font(.system(size: 15, weight: .semibold))
                 Text(isEmpty ? "No files" : "\(Theme.count(summary.count, "item")) · \(Theme.bytes(summary.bytes))")
+                    .contentTransition(.numericText())
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.top, 2)
@@ -394,11 +422,13 @@ private struct CleanupCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 Text(isEmpty ? "All clear" : Theme.bytes(summary.bytes))
+                    .contentTransition(.numericText())
                     .font(.system(size: 22, weight: .semibold, design: .rounded))
                     .foregroundStyle(isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                 Text(isEmpty ? "Nothing to review" : Theme.count(summary.count, "file") + " to review")
+                    .contentTransition(.numericText())
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

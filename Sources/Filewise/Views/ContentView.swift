@@ -151,8 +151,11 @@ struct ContentView: View {
     private var detail: some View {
         VStack(spacing: 0) {
             if let banner = library.bannerMessage {
-                bannerView(banner)
-                Divider()
+                VStack(spacing: 0) {
+                    bannerView(banner)
+                    Divider()
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
             if isHome {
                 ScrollViewReader { proxy in
@@ -175,6 +178,7 @@ struct ContentView: View {
                             onPreview: preview, onTrash: requestTrash)
             }
         }
+        .motion(value: library.bannerMessage)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if !library.selectedIDs.isEmpty { selectionBar }
         }
@@ -188,6 +192,7 @@ struct ContentView: View {
                     if let folder = library.folder { library.scan(folder) }
                 } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
+                        .symbolEffect(.pulse, isActive: library.scanning)
                 }
                 .help("Rescan the selected folder")
                 .disabled(library.folder == nil || library.scanning)
@@ -235,6 +240,7 @@ struct ContentView: View {
             Button { showSearchSuggestions.toggle() } label: {
                 Image(systemName: "sparkles")
                     .foregroundStyle(showSearchSuggestions ? Color.accentColor : .secondary)
+                    .symbolEffect(.bounce, value: showSearchSuggestions)
             }
             .buttonStyle(.borderless)
             .help("Search suggestions and recent searches")
@@ -262,7 +268,7 @@ struct ContentView: View {
     private func bannerView(_ message: String) -> some View {
         HStack(spacing: Theme.Spacing.m) {
             Image(systemName: "info.circle.fill").foregroundStyle(.tint).accessibilityHidden(true)
-            Text(message).font(.callout)
+            Text(message).font(.callout).contentTransition(.opacity)
             Spacer()
             if library.canUndoTrash {
                 Button { library.undoLastTrash() } label: {

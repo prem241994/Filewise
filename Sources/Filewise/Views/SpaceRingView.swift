@@ -63,7 +63,8 @@ struct SpaceRingView: View {
         .background(Theme.subtleFill, in: RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous))
         .task(id: "\(library.folder?.path ?? "")|\(total)") {
             guard let folder = library.folder else { disk = nil; return }
-            disk = await Task.detached { DiskSpace(for: folder) }.value
+            let space = await Task.detached { DiskSpace(for: folder) }.value
+            Motion.animate(disk != nil) { disk = space }
         }
         .onAppear {
             if reduceMotion { progress = 1 } else {
@@ -132,9 +133,10 @@ struct SpaceRingView: View {
             Circle().fill(color(slice.title)).frame(width: 10, height: 10)
             Text(slice.title).fontWeight(.medium)
             Spacer(minLength: Theme.Spacing.m)
-            Text(Theme.bytes(slice.summary.bytes)).monospacedDigit()
+            Text(Theme.bytes(slice.summary.bytes)).monospacedDigit().contentTransition(.numericText())
             Text(percent(slice.share))
                 .monospacedDigit()
+                .contentTransition(.numericText())
                 .foregroundStyle(.secondary)
                 .frame(width: 40, alignment: .trailing)
         }
@@ -172,6 +174,7 @@ struct SpaceRingView: View {
                     .font(.callout.weight(.medium))
                 Spacer()
                 Text("\(Theme.bytes(disk.available)) free of \(Theme.bytes(disk.total))")
+                    .contentTransition(.numericText())
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()

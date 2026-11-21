@@ -84,6 +84,9 @@ final class Library: ObservableObject {
     private var rescanTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
     private var visibleGeneration = 0
+    /// Set when the next published `visible` list should animate (files
+    /// leaving for the Trash, or coming back from Undo).
+    private var animateNextVisible = false
     private var changesDuringScan = false
     private static let folderPathKey = "filewise.selectedFolderPath"
     private static let customFolderPathKey = "filewise.customFolderPath"
@@ -170,13 +173,20 @@ final class Library: ObservableObject {
         return name + " › " + relative
     }
 
-    private func updateFiles(_ items: [FileItem]) {
-        (summaries, downloadSources) = LibrarySummary.totals(for: items)
+    /// Publishes a new file list. `animated` moves the counts, sizes, and
+    /// space ring to their new values smoothly; `animatesList` also slides
+    /// removed or restored files out of or into the visible list.
+    private func updateFiles(_ items: [FileItem], animated: Bool = false, animatesList: Bool = false) {
+        let totals = LibrarySummary.totals(for: items)
         filesByID = Dictionary(items.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        if !selectedIDs.isEmpty {
-            selectedIDs.formIntersection(filesByID.keys)
+        Motion.animate(animated) {
+            (summaries, downloadSources) = totals
+            if !selectedIDs.isEmpty {
+                selectedIDs.formIntersection(filesByID.keys)
+            }
+            files = items
         }
-        files = items
+        animateNextVisible = animatesList
         updateVisible()
     }
 
@@ -270,7 +280,7 @@ final class Library: ObservableObject {
         if let preview = previewURL, trashedPaths.contains(preview.path) {
             previewURL = nil
         }
-        updateFiles(files.filter { !trashedPaths.contains($0.url.path) })
+        updateFiles(files.filter { !trashedPaths.contains($0.url.path) }, animated: true, animatesList: true)
 
         let formatted = ByteCountFormatter.string(fromByteCount: outcome.bytesMoved, countStyle: .file)
         trashBytesMoved = outcome.bytesMoved
@@ -319,7 +329,7 @@ final class Library: ObservableObject {
             } else {
                 bannerMessage = "Restored \(restored.count) files (\(formatted)) from Trash"
             }
-            updateFiles((files + restored).sorted { $0.modified > $1.modified })
+            updateFiles((files + restored).sorted { $0.modified > $1.modified }, animated: true, animatesList: true)
         }
     }
 
@@ -510,7 +520,7 @@ final class Library: ObservableObject {
                 return (saved, error)
             }
             guard isCurrent(id, token) else { return }
-            updateFiles(items)
+            updateFiles(items, animated: true)
             scannedCount = items.count
             scanning = false
             activeScan = nil
@@ -556,6 +566,8 @@ final class Library: ObservableObject {
         // restore files that were since removed.
         visibleGeneration += 1
         let generation = visibleGeneration
+        let animated = animateNextVisible
+        animateNextVisible = false
         let (files, query, category, folder, sortOrder) = (files, query, category, folder, sortOrder)
         searchTask = Task {
             if !query.isEmpty {
@@ -567,7 +579,7 @@ final class Library: ObservableObject {
                 FileSearch.filter(files, query: query, category: category, folder: folder, sortOrder: sortOrder)
             }
             guard visibleGeneration == generation else { return }
-            visible = filtered
+            Motion.animate(animated) { visible = filtered }
         }
     }
 }
