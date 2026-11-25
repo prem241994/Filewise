@@ -9,7 +9,13 @@ struct HomeView: View {
     let onTrash: ([FileItem]) -> Void
 
     private let grid = [GridItem(.adaptive(minimum: 200, maximum: 320), spacing: Theme.Spacing.l)]
-    private let cleanupCategories = ["Duplicates", "Forgotten Downloads", "Old Screenshots", "Large Files"]
+    /// Cleanup cards grouped by how readily their files can usually go.
+    private static func cleanupCategories(_ confidence: CleanupConfidence) -> [String] {
+        switch confidence {
+        case .usuallySafe: ["Duplicates", "Forgotten Downloads", "Old Screenshots"]
+        case .yourCall: ["Large Files"]
+        }
+    }
 
     /// The folder whose Home has already played its entrance, so returning to
     /// Home from another page doesn't replay it.
@@ -44,14 +50,15 @@ struct HomeView: View {
                 .entrance(appeared, order: 1)
                 recentMedia.entrance(appeared, order: 2)
                 section("Clean Up", seeAll: "Clean Up") {
-                    // One row of four when it fits, otherwise a balanced 2×2 grid.
+                    // Both groups side by side when they fit, otherwise stacked.
                     ViewThatFits(in: .horizontal) {
-                        HStack(spacing: Theme.Spacing.l) {
-                            ForEach(cleanupCategories, id: \.self) { cleanupCard($0).frame(minWidth: 130) }
+                        HStack(alignment: .top, spacing: Theme.Spacing.xl) {
+                            cleanupGroup(.usuallySafe).layoutPriority(3)
+                            cleanupGroup(.yourCall).frame(minWidth: 150, maxWidth: 260)
                         }
-                        Grid(horizontalSpacing: Theme.Spacing.l, verticalSpacing: Theme.Spacing.l) {
-                            GridRow { cleanupCard(cleanupCategories[0]); cleanupCard(cleanupCategories[1]) }
-                            GridRow { cleanupCard(cleanupCategories[2]); cleanupCard(cleanupCategories[3]) }
+                        VStack(alignment: .leading, spacing: Theme.Spacing.l) {
+                            cleanupGroup(.usuallySafe)
+                            cleanupGroup(.yourCall).frame(maxWidth: 260)
                         }
                     }
                 }
@@ -127,6 +134,18 @@ struct HomeView: View {
                     totalBytes: library.summary(for: "Home").bytes,
                     previews: Array(library.files.lazy.filter { $0.libraryCategory == title }.prefix(3))) {
             library.category = title
+        }
+    }
+
+    private func cleanupGroup(_ confidence: CleanupConfidence) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            Label(confidence.title, systemImage: confidence.symbol)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(confidence == .usuallySafe ? Color.green : Color.orange)
+                .accessibilityAddTraits(.isHeader)
+            HStack(spacing: Theme.Spacing.l) {
+                ForEach(Self.cleanupCategories(confidence), id: \.self) { cleanupCard($0).frame(minWidth: 130) }
+            }
         }
     }
 

@@ -111,12 +111,51 @@ public enum CleanupReason: CaseIterable, Sendable {
         }
     }
 
+    /// How readily the file can usually go: extra copies, old screenshots,
+    /// and old downloads are usually safe to clear; large files are the
+    /// user's call, since size alone says nothing about whether they're needed.
+    public var confidence: CleanupConfidence {
+        switch self {
+        case .duplicate, .oldScreenshot, .forgottenDownload: .usuallySafe
+        case .large: .yourCall
+        }
+    }
+
+    /// One line of advice shown with the reason.
+    public var advice: String {
+        switch self {
+        case .duplicate: "Usually safe to clear: keep one copy and move the extras to the Trash."
+        case .oldScreenshot: "Usually safe to clear: most screenshots are only needed for a short time."
+        case .forgottenDownload: "Usually safe to clear: many downloads can be downloaded again."
+        case .large: "Your call: a large file isn’t necessarily one you don’t need."
+        }
+    }
+
     public var symbol: String {
         switch self {
         case .duplicate: "square.on.square"
         case .large: "externaldrive"
         case .oldScreenshot: "camera.viewfinder"
         case .forgottenDownload: "arrow.down.circle"
+        }
+    }
+}
+
+/// How readily a cleanup suggestion can usually be acted on.
+public enum CleanupConfidence: CaseIterable, Sendable {
+    case usuallySafe, yourCall
+
+    public var title: String {
+        switch self {
+        case .usuallySafe: "Usually safe to clear"
+        case .yourCall: "Your call"
+        }
+    }
+
+    public var symbol: String {
+        switch self {
+        case .usuallySafe: "checkmark.shield"
+        case .yourCall: "hand.raised"
         }
     }
 }

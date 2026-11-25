@@ -55,6 +55,10 @@ struct DetailInspectorView: View {
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(reason.label).font(.callout.weight(.medium))
                                     Text(reason.explanation).font(.caption).foregroundStyle(.secondary)
+                                    Label(reason.advice, systemImage: reason.confidence.symbol)
+                                        .font(.caption)
+                                        .foregroundStyle(reason.confidence == .usuallySafe ? Color.green : Color.orange)
+                                        .padding(.top, 2)
                                 }
                             }
                             .accessibilityElement(children: .combine)
