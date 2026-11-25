@@ -9,6 +9,8 @@ struct DetailInspectorView: View {
     let onQuickLook: () -> Void
     let onTrash: () -> Void
     var autoplay = false
+    /// Text read from the screenshot, loaded from the index.
+    @State private var imageText: String?
 
     var body: some View {
         ScrollView {
@@ -66,6 +68,20 @@ struct DetailInspectorView: View {
                     }
                 }
 
+                if let imageText, !imageText.isEmpty {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                        sectionLabel("Text in this screenshot")
+                        Text(imageText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(10)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(Theme.Spacing.s)
+                            .background(Theme.subtleFill, in: RoundedRectangle(cornerRadius: Theme.Radius.s))
+                    }
+                }
+
                 if !otherCopies.isEmpty {
                     VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                         sectionLabel(otherCopies.count == 1 ? "Identical copy" : "Identical copies")
@@ -110,6 +126,11 @@ struct DetailInspectorView: View {
                 .controlSize(.large)
             }
             .padding(Theme.Spacing.l)
+        }
+        .task(id: item.id) {
+            guard ImageTextReader.shouldRead(item) else { imageText = nil; return }
+            let path = item.url.path
+            imageText = await Task.detached(priority: .userInitiated) { FileIndex.imageText(path: path) }.value
         }
     }
 

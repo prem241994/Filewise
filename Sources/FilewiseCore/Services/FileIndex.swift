@@ -98,6 +98,17 @@ public enum FileIndex {
               sqlite3_exec(database, """
             CREATE TABLE IF NOT EXISTS search_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)
             """, nil, nil, nil) == SQLITE_OK,
+              // Text read from screenshots, with the size and date it was read
+              // at, and its own search index. Both are rebuildable.
+              sqlite3_exec(database, """
+            CREATE TABLE IF NOT EXISTS image_text (
+                root TEXT NOT NULL, path TEXT NOT NULL, size INTEGER NOT NULL,
+                modified REAL NOT NULL, text TEXT NOT NULL, PRIMARY KEY (root, path)
+            )
+            """, nil, nil, nil) == SQLITE_OK,
+              sqlite3_exec(database, """
+            CREATE VIRTUAL TABLE IF NOT EXISTS image_text_fts USING fts5(content, filepath UNINDEXED)
+            """, nil, nil, nil) == SQLITE_OK,
               sqlite3_exec(database, """
             CREATE TABLE IF NOT EXISTS trash_manifest (
                 original_path TEXT PRIMARY KEY, trash_path TEXT NOT NULL,
@@ -143,6 +154,8 @@ public enum FileIndex {
         guard sqlite3_exec(database, "DELETE FROM files", nil, nil, nil) == SQLITE_OK,
               sqlite3_exec(database, "DELETE FROM files_fts", nil, nil, nil) == SQLITE_OK,
               sqlite3_exec(database, "DELETE FROM search_meta WHERE key = 'fts_root'", nil, nil, nil) == SQLITE_OK,
+              sqlite3_exec(database, "DELETE FROM image_text", nil, nil, nil) == SQLITE_OK,
+              sqlite3_exec(database, "DELETE FROM image_text_fts", nil, nil, nil) == SQLITE_OK,
               sqlite3_exec(database, "COMMIT", nil, nil, nil) == SQLITE_OK else { return false }
         committed = true
         return true
@@ -592,21 +605,114 @@ public enum FileIndex {
         }.joined(separator: " ")
         guard !ftsQuery.isEmpty else { return nil }
 
+        // A file matches when every term matches its name, folder, or source,
+        // or the text read from it (screenshots).
+        let rootPrefixes = PathPrefixes.forFolder(root)
+        var matched: Set<String>?
+        for term in ftsQuery.split(separator: " ").map(String.init) {
+            guard let names = matchingPaths(term, table: "files_fts", database: database),
+                  let texts = matchingPaths(term, table: "image_text_fts", database: database) else { return nil }
+            let paths = names.union(texts).filter { path in rootPrefixes.contains(where: path.hasPrefix) }
+            matched = matched.map { $0.intersection(paths) } ?? paths
+            if matched?.isEmpty == true { break }
+        }
+        let paths = matched ?? []
+        return paths
+    }
+
+    private static func matchingPaths(_ ftsQuery: String, table: String, database: OpaquePointer?) -> Set<String>? {
         var stmt: OpaquePointer?
-        let sql = "SELECT filepath FROM files_fts WHERE files_fts MATCH ?"
-        guard sqlite3_prepare_v2(database, sql, -1, &stmt, nil) == SQLITE_OK
+        guard sqlite3_prepare_v2(database, "SELECT filepath FROM \(table) WHERE \(table) MATCH ?", -1, &stmt, nil) == SQLITE_OK
         else { return nil }
         defer { sqlite3_finalize(stmt) }
         sqlite3_bind_text(stmt, 1, ftsQuery, -1, transient)
-
         var paths = Set<String>()
-        let rootPrefixes = PathPrefixes.forFolder(root)
         while sqlite3_step(stmt) == SQLITE_ROW {
-            if let p = sqlite3_column_text(stmt, 0) {
-                let path = String(cString: p)
-                if rootPrefixes.contains(where: path.hasPrefix) { paths.insert(path) }
-            }
+            if let p = sqlite3_column_text(stmt, 0) { paths.insert(String(cString: p)) }
         }
         return paths
+    }
+
+    // MARK: - Text in images
+
+    /// The size and date each stored image text was read at, by path.
+    public static func imageTextState(root: URL) -> [String: (size: Int64, modified: Date)] {
+        guard let database = openDatabase() else { return [:] }
+        defer { sqlite3_close(database) }
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(database, "SELECT path, size, modified FROM image_text WHERE root = ?",
+                                 -1, &stmt, nil) == SQLITE_OK else { return [:] }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, root.path, -1, transient)
+        var state: [String: (size: Int64, modified: Date)] = [:]
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            if let path = sqlite3_column_text(stmt, 0) {
+                state[String(cString: path)] = (sqlite3_column_int64(stmt, 1),
+                                                Date(timeIntervalSince1970: sqlite3_column_double(stmt, 2)))
+            }
+        }
+        return state
+    }
+
+    /// Stores text read from images, replacing any older text for the same
+    /// paths, and drops stored text for `removing` (images that are gone).
+    @discardableResult
+    public static func saveImageText(_ entries: [ImageTextEntry], removing: Set<String> = [], root: URL) -> Bool {
+        guard !entries.isEmpty || !removing.isEmpty, let database = openDatabase() else { return entries.isEmpty && removing.isEmpty }
+        defer { sqlite3_close(database) }
+        guard sqlite3_exec(database, "BEGIN IMMEDIATE TRANSACTION", nil, nil, nil) == SQLITE_OK else { return false }
+        var committed = false
+        defer { if !committed { sqlite3_exec(database, "ROLLBACK", nil, nil, nil) } }
+
+        var deleteRow: OpaquePointer?, deleteSearch: OpaquePointer?, insertRow: OpaquePointer?, insertSearch: OpaquePointer?
+        guard sqlite3_prepare_v2(database, "DELETE FROM image_text WHERE root = ? AND path = ?", -1, &deleteRow, nil) == SQLITE_OK,
+              sqlite3_prepare_v2(database, "DELETE FROM image_text_fts WHERE filepath = ?", -1, &deleteSearch, nil) == SQLITE_OK,
+              sqlite3_prepare_v2(database, "INSERT INTO image_text (root, path, size, modified, text) VALUES (?, ?, ?, ?, ?)",
+                                 -1, &insertRow, nil) == SQLITE_OK,
+              sqlite3_prepare_v2(database, "INSERT INTO image_text_fts (content, filepath) VALUES (?, ?)",
+                                 -1, &insertSearch, nil) == SQLITE_OK else {
+            [deleteRow, deleteSearch, insertRow, insertSearch].forEach { sqlite3_finalize($0) }
+            return false
+        }
+        defer { [deleteRow, deleteSearch, insertRow, insertSearch].forEach { sqlite3_finalize($0) } }
+
+        for path in removing.union(entries.map(\.path)) {
+            sqlite3_reset(deleteRow)
+            sqlite3_bind_text(deleteRow, 1, root.path, -1, transient)
+            sqlite3_bind_text(deleteRow, 2, path, -1, transient)
+            sqlite3_reset(deleteSearch)
+            sqlite3_bind_text(deleteSearch, 1, path, -1, transient)
+            guard sqlite3_step(deleteRow) == SQLITE_DONE, sqlite3_step(deleteSearch) == SQLITE_DONE else { return false }
+        }
+        for entry in entries {
+            sqlite3_reset(insertRow)
+            sqlite3_bind_text(insertRow, 1, root.path, -1, transient)
+            sqlite3_bind_text(insertRow, 2, entry.path, -1, transient)
+            sqlite3_bind_int64(insertRow, 3, entry.size)
+            sqlite3_bind_double(insertRow, 4, entry.modified.timeIntervalSince1970)
+            sqlite3_bind_text(insertRow, 5, entry.text, -1, transient)
+            guard sqlite3_step(insertRow) == SQLITE_DONE else { return false }
+            guard !entry.text.isEmpty else { continue }
+            sqlite3_reset(insertSearch)
+            sqlite3_bind_text(insertSearch, 1, entry.text, -1, transient)
+            sqlite3_bind_text(insertSearch, 2, entry.path, -1, transient)
+            guard sqlite3_step(insertSearch) == SQLITE_DONE else { return false }
+        }
+        guard sqlite3_exec(database, "COMMIT", nil, nil, nil) == SQLITE_OK else { return false }
+        committed = true
+        return true
+    }
+
+    /// The text read from the image at `path`, if any was stored.
+    public static func imageText(path: String) -> String? {
+        guard let database = openDatabase() else { return nil }
+        defer { sqlite3_close(database) }
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(database, "SELECT text FROM image_text WHERE path = ? LIMIT 1",
+                                 -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, path, -1, transient)
+        guard sqlite3_step(stmt) == SQLITE_ROW, let text = sqlite3_column_text(stmt, 0) else { return nil }
+        return String(cString: text)
     }
 }

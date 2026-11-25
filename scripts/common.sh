@@ -32,7 +32,7 @@ build_core() {
         -emit-module -emit-module-path "$out/FilewiseCore.swiftmodule" \
         "$project_dir"/Sources/FilewiseCore/**/*.swift \
         -o "$out/libFilewiseCore.a"
-    core_link_flags=(-I "$out" -L "$out" -lFilewiseCore -lsqlite3)
+    core_link_flags=(-I "$out" -L "$out" -lFilewiseCore -lsqlite3 -framework Vision)
 }
 
 # Sources of the app's view-model layer, which the integration tests drive.

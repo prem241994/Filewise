@@ -30,5 +30,7 @@ jobs:
         run: ./scripts/test-scan-search.sh
       - name: Test search date phrases
         run: ./scripts/test-search-dates.sh
+      - name: Test text in screenshots
+        run: ./scripts/test-image-text.sh
       - name: Test Trash safety
         run: ./scripts/test-trash-safety.sh

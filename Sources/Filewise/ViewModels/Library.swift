@@ -48,6 +48,9 @@ final class Library: ObservableObject {
     /// Why a search with a date found nothing, when it did: the date range
     /// searched, and the newest file that matches without the date.
     @Published private(set) var emptySearchHint: EmptySearchHint?
+    /// Progress of reading the text in screenshots after a scan, or nil.
+    @Published private(set) var textReading: TextReadingProgress?
+    private var textReadingToken: ScanToken?
     @Published private(set) var summaries: [String: LibrarySummary] = [:]
     @Published private(set) var downloadSources: [String: LibrarySummary] = [:]
     @Published var selectedIDs = Set<String>() {
@@ -423,6 +426,7 @@ final class Library: ObservableObject {
     // MARK: - Scanning
 
     func cancelScan() {
+        stopReadingText()
         activeScan?.cancel()
         activeScan = nil
         stopWatching()
@@ -439,6 +443,7 @@ final class Library: ObservableObject {
     }
 
     func scan(_ url: URL) {
+        stopReadingText()
         activeScan?.cancel()
         if folder != url {
             lastTrashBatchId = nil
@@ -535,6 +540,7 @@ final class Library: ObservableObject {
                 dates[url.standardizedFileURL.path] = now
                 UserDefaults.standard.set(dates, forKey: Self.scanDatesKey)
                 status = "\(items.count.formatted()) files indexed"
+                readImageText(items, root: url)
             } else {
                 status = "\(items.count.formatted()) files scanned; local index unavailable\(indexError.map { ": " + $0 } ?? "")"
             }
@@ -558,6 +564,62 @@ final class Library: ObservableObject {
             } else {
                 scan(url)
             }
+        }
+    }
+
+    // MARK: - Text in screenshots
+
+    private func stopReadingText() {
+        textReadingToken?.cancel()
+        textReadingToken = nil
+        textReading = nil
+    }
+
+    /// Reads the text in new or changed screenshots, a few at a time on a
+    /// background task, and stores it so searches find words inside them.
+    /// Text already read for an unchanged image is reused; text for images
+    /// that are gone is dropped.
+    private func readImageText(_ items: [FileItem], root: URL) {
+        stopReadingText()
+        let token = ScanToken()
+        textReadingToken = token
+        Task {
+            let pending: [FileItem] = await Self.background {
+                let stored = FileIndex.imageTextState(root: root)
+                let images = items.filter(ImageTextReader.shouldRead)
+                let gone = Set(stored.keys).subtracting(images.map(\.url.path))
+                FileIndex.saveImageText([], removing: gone, root: root)
+                return images.filter { item in
+                    guard let old = stored[item.url.path] else { return true }
+                    // Dates come back from SQLite with rounding, so compare to the millisecond.
+                    return old.size != item.size
+                        || abs(old.modified.timeIntervalSince1970 - item.modified.timeIntervalSince1970) > 0.001
+                }
+            }
+            guard textReadingToken === token else { return }
+            guard !pending.isEmpty else {
+                textReadingToken = nil
+                return
+            }
+            textReading = TextReadingProgress(done: 0, total: pending.count)
+            for start in stride(from: 0, to: pending.count, by: 6) {
+                let batch = Array(pending[start..<min(start + 6, pending.count)])
+                await Self.background {
+                    let entries = batch.compactMap { item -> ImageTextEntry? in
+                        guard !token.isCancelled else { return nil }
+                        // An image that can't be read is stored without text,
+                        // so it isn't retried until it changes.
+                        let text = ImageTextReader.read(item.url) ?? ""
+                        return ImageTextEntry(path: item.url.path, size: item.size, modified: item.modified, text: text)
+                    }
+                    if !token.isCancelled { FileIndex.saveImageText(entries, root: root) }
+                }
+                guard textReadingToken === token else { return }
+                textReading?.done += batch.count
+                if !query.isEmpty { updateVisible() }
+            }
+            textReading = nil
+            textReadingToken = nil
         }
     }
 
@@ -605,4 +667,9 @@ struct EmptySearchHint: Sendable, Equatable {
             : FileSearch.filter(files, query: queryWithoutDate, category: "Home", folder: folder)
         newestMatch = matches.lazy.map(\.modified).max()
     }
+}
+
+struct TextReadingProgress: Equatable {
+    var done: Int
+    let total: Int
 }

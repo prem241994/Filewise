@@ -56,8 +56,10 @@ public enum FolderScanner {
             guard values.isRegularFile == true || isAppBundle else { continue }
             if isAppBundle { enumerator.skipDescendants() }
             let size = isAppBundle ? bundleSize(file, token: token) : Int64(values.fileSize ?? 0)
-            let modified = values.contentModificationDate ?? .distantPast
-            let changed = values.attributeModificationDate
+            // Dates are rounded the way the index stores them, so a file read
+            // back from the index compares equal to the same file on disk.
+            let modified = Self.indexed(values.contentModificationDate) ?? .distantPast
+            let changed = Self.indexed(values.attributeModificationDate)
             let old = previousByPath[file.path]
             // Attribute changes invalidate cached values, including when only
             // download metadata changes. A missing origin is also cached.
@@ -69,7 +71,7 @@ public enum FolderScanner {
                                   downloadSource: unchanged ? old?.downloadSource : FileOriginExtractor.origin(for: file),
                                   // Opening a file rewrites this attribute, which
                                   // changes the attribute date, so reuse is safe.
-                                  lastOpened: unchanged ? old?.lastOpened : FileUsage.lastOpened(for: file)))
+                                  lastOpened: unchanged ? old?.lastOpened : Self.indexed(FileUsage.lastOpened(for: file))))
             if found.count.isMultiple(of: 250) { progress(found.count) }
         }
         guard !token.isCancelled else { return .cancelled }
@@ -130,5 +132,12 @@ public enum FolderScanner {
             }
             return Data(hash.finalize())
         } catch { return nil }
+    }
+
+    /// `date` as the index stores it (seconds since 1970 in a Double). Dates
+    /// from the file system don't always survive that round trip unchanged,
+    /// which made unchanged files look changed on every refresh.
+    static func indexed(_ date: Date?) -> Date? {
+        date.map { Date(timeIntervalSince1970: $0.timeIntervalSince1970) }
     }
 }

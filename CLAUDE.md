@@ -29,12 +29,13 @@ There is no XCTest. Each test is a standalone `@main` harness in `tests/`. It co
 | `scripts/test-duplicates.sh` | keep rules for "Select Extra Copies" (Core only) |
 | `scripts/test-scan-search.sh` | scanning, cancellation, FTS search, missing/restricted folders, settings |
 | `scripts/test-search-dates.sh` | date phrases in searches ("last week", "yesterday", "this month"), fixed "now" (Core only) |
+| `scripts/test-image-text.sh` | reading words in screenshots (Vision), searching them, reuse, re-reading, removal |
 | `scripts/test-index-health.sh` | schema migration, Undo-record preservation, corrupt DB handling |
 | `scripts/test-trash-safety.sh` | Trash journaling, failed Undo writes, rollback, restart recovery |
 | `scripts/test-trash-cancellation.sh` | real macOS Trash; **local only** (needs Trash access, not in CI) |
 | `scripts/benchmark-scan.sh` | 10k-file scan/refresh timing and peak RSS (`FILEWISE_BENCHMARK_FILES` sets the size) |
 
-CI (`.github/workflows/macos.yml`) runs `package.sh` plus the license, duplicates, index-health, scan-search, search-dates, and trash-safety scripts. To add a test, write `tests/FooHarness.swift` and a matching `scripts/test-foo.sh` modeled on an existing one, then add a step to the workflow.
+CI (`.github/workflows/macos.yml`) runs `package.sh` plus the license, duplicates, index-health, scan-search, search-dates, image-text, and trash-safety scripts. To add a test, write `tests/FooHarness.swift` and a matching `scripts/test-foo.sh` modeled on an existing one, then add a step to the workflow.
 
 Harnesses that touch the index must set `FILEWISE_TEST_DATABASE_DIRECTORY` to a temp dir (the scripts already do). Otherwise `FileIndex` writes to the real index in `~/Library/Application Support/Filewise/`. The sandboxed app uses its container instead, at `~/Library/Containers/app.filewise.desktop/Data/Library/Application Support/Filewise/`.
 
@@ -57,12 +58,13 @@ For **accessibility**, a step `name:Accessibility:<category>` writes `name-<appe
 
 Two modules:
 
-- **`Sources/FilewiseCore`**: no UI, links only Foundation and sqlite3. Most services are stateless `public enum` namespaces of static functions that are safe to call from any thread:
-  - `FileIndex`: the SQLite database (raw `sqlite3` C API, no wrapper). Tables: `files`, the FTS5 `files_fts` (name/extension/path search), `search_meta` (per-folder metadata such as last scan time), and `trash_manifest` (the Undo journal). Schema changes are migrations inside a transactional `initializeSchema`. `test-index-health.sh` checks older-schema migration, and the migration must keep `trash_manifest` rows intact. The DB also stores derived data (last-opened date, origin, SHA-256 hashes) so refreshes can reuse it for unchanged files.
-  - `FolderScanner`: enumerates the folder and updates only changed rows. It hashes only files that share a size, to find duplicates. It treats `.app` bundles as single items and honors `CleanupSettings.ignoredPaths`.
+- **`Sources/FilewiseCore`**: no UI, links only Foundation, sqlite3, and Vision. Most services are stateless `public enum` namespaces of static functions that are safe to call from any thread:
+  - `FileIndex`: the SQLite database (raw `sqlite3` C API, no wrapper). Tables: `files`, the FTS5 `files_fts` (name/extension/path search), `image_text` and its FTS5 `image_text_fts` (words read from screenshots), `search_meta` (per-folder metadata such as last scan time), and `trash_manifest` (the Undo journal). `searchPaths` matches each term against names or screenshot text, and a file must match every term. Schema changes are migrations inside a transactional `initializeSchema`. `test-index-health.sh` checks older-schema migration, and the migration must keep `trash_manifest` rows intact. The DB also stores derived data (last-opened date, origin, SHA-256 hashes) so refreshes can reuse it for unchanged files.
+  - `FolderScanner`: enumerates the folder and updates only changed rows. Dates are rounded as the index stores them (`indexed(_:)`) so unchanged files compare equal after a reload. It hashes only files that share a size, to find duplicates. It treats `.app` bundles as single items and honors `CleanupSettings.ignoredPaths`.
   - `FileSearch`: parses natural-language queries ("pdfs from last week", "large videos", "screenshots in Downloads") into type, date, size, and location filters plus FTS terms. `dateFilter(in:)` handles today, yesterday, this/last week, and this/last month; "last week/month" runs from the start of the previous week/month up to now. When a dated search is empty, `Library.emptySearchHint` gives the range and the newest match on other dates.
   - `TrashService`: journals each move in `trash_manifest` before and after it happens. It stops if it can't write a journal entry, tries to roll back, and restores the latest batch (including after a crash, on reopening the folder). `TrashOperations` injects the file-system calls so tests can simulate failures.
   - `DuplicateSelection` / `KeepRule`: chooses which copy of a duplicate set to keep.
+  - `ImageTextReader`: on-device text recognition (Vision `VNRecognizeTextRequest`, accurate) for screenshots, about 0.6 s each. After a successful scan, `Library.readImageText` reads new or changed screenshots in batches on a background task, reuses stored text for unchanged ones, drops text for removed ones, and shows progress in the sidebar. The inspector shows the stored text.
   - `FileWatcher`: FSEvents-based and debounced; it triggers refreshes.
   - `ScanToken`: lock-backed `Sendable` cancellation flag that the main actor shares with background work.
   - `PathPrefixes`: returns both the given and canonical forms of a folder path (`/var` vs `/private/var`). FSEvents reports canonical paths, so **any path-prefix matching must use it**.

@@ -8,8 +8,9 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [.executable(name: "Filewise", targets: ["Filewise"])],
     targets: [
-        // Models, SQLite index, scanning, search, and Trash. No UI.
-        .target(name: "FilewiseCore", linkerSettings: [.linkedLibrary("sqlite3")]),
+        // Models, SQLite index, scanning, search, Trash, and on-device text
+        // recognition for screenshots (Vision). No UI.
+        .target(name: "FilewiseCore", linkerSettings: [.linkedLibrary("sqlite3"), .linkedFramework("Vision")]),
         // SwiftUI views and the main-actor view model.
         .executableTarget(name: "Filewise", dependencies: ["FilewiseCore"]),
     ]

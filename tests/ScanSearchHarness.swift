@@ -113,6 +113,11 @@ struct ScanSearchHarness {
         try require(waitUntil { !library.scanning && library.files.count == count },
                     "full large-folder scan timed out or missed files")
         try require(FileIndex.load(root: root)?.count == count, "large-folder index count was wrong")
+        // Dates must compare equal after a round trip through the index, or
+        // every refresh treats unchanged files as changed.
+        let indexedDates = Dictionary(uniqueKeysWithValues: (FileIndex.load(root: root) ?? []).map { ($0.url.path, $0.modified) })
+        try require(library.files.allSatisfy { indexedDates[$0.url.path] == $0.modified },
+                    "file dates changed in the index round trip")
         try require(library.files.filter { $0.libraryCategory == "Apps" }.map(\.name) == [app.lastPathComponent], "app bundle was not indexed as one app")
         try require(library.files.first { $0.name == app.lastPathComponent }?.size == 8, "app bundle size did not include its contents")
         try require(!library.files.contains { $0.name == "internal.txt" }, "app contents were indexed separately")

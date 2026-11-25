@@ -140,6 +140,13 @@ struct SidebarView: View {
                     Button("Cancel") { library.cancelScan() }
                         .buttonStyle(.link)
                 }
+            } else if let reading = library.textReading {
+                HStack(spacing: Theme.Spacing.s) {
+                    ProgressView().controlSize(.small)
+                    Text("Reading text in screenshots… \(reading.done.formatted()) of \(reading.total.formatted())")
+                        .lineLimit(2)
+                }
+                .accessibilityElement(children: .combine)
             } else {
                 Text(library.status).lineLimit(2)
                 if let date = library.lastSuccessfulScan {
