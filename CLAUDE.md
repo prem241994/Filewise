@@ -12,6 +12,7 @@ Swift Package Manager is **not used** because it is broken on the development Ma
 ./scripts/build.sh                 # builds .build/Filewise.app, ad-hoc signed with the sandbox entitlements
 open .build/Filewise.app
 zsh scripts/package.sh             # build + codesign/entitlement checks + .build/Filewise-local.zip (what CI runs)
+zsh scripts/beta.sh                # tester copy: universal, everything unlocked (-D FILEWISE_BETA), .build/Filewise-Beta.zip
 ```
 
 If the active SDK doesn't match the compiler (it doesn't on this Mac), set this first:
@@ -87,6 +88,7 @@ The business model is a 7-day free trial, then a $5.99 non-consumable in-app pur
 - `FilewiseCore/Models/License.swift` holds the pure trial math (`LicenseStatus`: checking, notStarted, trial, expired, unlocked). `Services/Store.swift` (`@MainActor`, shared from `FilewiseApp`) takes the trial start from the trial product's purchase date and the unlock from `Transaction.currentEntitlements`, and listens to `Transaction.updates`. When the trial product is unavailable (not an App Store install), Start Free Trial saves a local start date instead.
 - **Only cleanup actions are gated.** Move to Trash (`ContentView.requestTrash`) and Select Extra Copies (`ResultsView`) go through `store.requireUnlock`, which shows `PaywallView` when expired. Search, browsing, suggestions, and **Undo** must stay free. Never gate restore.
 - `FILEWISE_LICENSE_TESTING=1 ./scripts/build.sh` compiles in an override read from `FILEWISE_LICENSE=new|trial:<days>|expired|unlocked` at launch, and test purchases succeed instantly. The snapshot build always has it (default `trial:5`), and the `Paywall` snapshot step captures the sheet. The shipping build must not contain it: `strings` on the binary should not find `FILEWISE_LICENSE`.
+- `scripts/beta.sh` builds the tester copy with `-D FILEWISE_BETA`, which makes `Store` report `.unlocked` because testers can't reach the App Store. It is ad-hoc signed (testers allow it under Privacy & Security) and must never be uploaded; the App Store build must not contain the "Beta version" text.
 - Real purchases can only be tested once both products exist in App Store Connect, through a sandbox account. There is no `.storekit` configuration because there is no Xcode project.
 
 The integration harnesses drive `Library` itself, which is why they compile the ViewModels sources together with AppKit and SwiftUI.

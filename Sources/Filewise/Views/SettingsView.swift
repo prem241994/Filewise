@@ -104,7 +104,7 @@ struct SettingsView: View {
         case .notStarted: "Free trial not started"
         case .trial(let days): "Free trial, \(Theme.count(days, "day")) left"
         case .expired: "Trial ended"
-        case .unlocked: "Unlocked. Thank you!"
+        case .unlocked: Self.unlockedText
         }
     }
 
@@ -118,4 +118,12 @@ struct SettingsView: View {
         guard panel.runModal() == .OK else { return }
         panel.urls.forEach(settings.ignore)
     }
+}
+
+extension SettingsView {
+    #if FILEWISE_BETA
+    static let unlockedText = "Beta version: everything is unlocked. Thank you for testing!"
+    #else
+    static let unlockedText = "Unlocked. Thank you!"
+    #endif
 }

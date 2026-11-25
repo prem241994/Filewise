@@ -191,7 +191,13 @@ final class Store: ObservableObject {
         #if FILEWISE_LICENSE_TESTING
         if override != nil { return }
         #endif
+        #if FILEWISE_BETA
+        // Tester builds (scripts/beta.sh) can't reach the App Store, so
+        // everything is unlocked. Never part of the App Store build.
+        status = .unlocked
+        #else
         status = License.status(trialStart: trialStart, unlocked: unlocked, checked: checked)
+        #endif
     }
 
     // MARK: - StoreKit
