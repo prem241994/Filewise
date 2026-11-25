@@ -44,10 +44,14 @@ struct ResultsView: View {
                     if library.files.isEmpty && !library.scanning && library.scanNotice != nil {
                         ScanNoticeView(library: library).padding(Theme.Spacing.page)
                     } else {
-                        ContentUnavailableView(
-                            library.query.isEmpty ? "No Files" : "No Matching Files",
-                            systemImage: library.query.isEmpty ? Theme.icon(for: library.category) : "magnifyingglass",
-                            description: Text(library.scanning ? "Indexing your files…" : emptyMessage))
+                        ContentUnavailableView {
+                            Label(library.query.isEmpty ? "No Files" : "No Matching Files",
+                                  systemImage: library.query.isEmpty ? Theme.icon(for: library.category) : "magnifyingglass")
+                        } description: {
+                            Text(library.scanning ? "Indexing your files…" : emptyMessage)
+                        } actions: {
+                            if !library.query.isEmpty && !library.scanning { emptyActions }
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -63,8 +67,38 @@ struct ResultsView: View {
         library.query.isEmpty ? Theme.title(for: library.category) : "Results for “\(library.query)”"
     }
 
+    private var folderName: String { library.folder?.lastPathComponent ?? "this folder" }
+
     private var emptyMessage: String {
-        library.query.isEmpty ? "Nothing in this folder matches this view." : "Try another word, or a phrase like “large videos”."
+        if library.query.isEmpty { return "Nothing in this folder matches this view." }
+        guard let hint = library.emptySearchHint else {
+            return "Nothing in \(folderName) matches. Try another word, a phrase like “large videos”, or another folder."
+        }
+        // The range ends at now, or at midnight for "yesterday": show the last
+        // day it covers, and a single day when it covers only one.
+        let range = hint.date.range
+        let lastDay = range.end.addingTimeInterval(range.end == Calendar.current.startOfDay(for: range.end) ? -1 : 0)
+        let format = Date.FormatStyle.dateTime.day().month(.abbreviated)
+        let days = Calendar.current.isDate(range.start, inSameDayAs: lastDay)
+            ? range.start.formatted(format)
+            : range.start.formatted(format) + "–" + lastDay.formatted(format)
+        var message = "Nothing \(hint.date.phrase) (\(days)) in \(folderName)."
+        if let newest = hint.newestMatch {
+            message += " Without the date, the newest match is from \(newest.formatted(date: .abbreviated, time: .omitted))."
+        } else {
+            message += " Nothing matches on other dates either."
+        }
+        return message
+    }
+
+    @ViewBuilder private var emptyActions: some View {
+        HStack {
+            if let hint = library.emptySearchHint, hint.newestMatch != nil {
+                Button("Search All Dates") { library.query = hint.queryWithoutDate }
+                    .buttonStyle(.borderedProminent)
+            }
+            Button("Choose Another Folder…") { library.chooseFolder() }
+        }
     }
 
     private var header: some View {

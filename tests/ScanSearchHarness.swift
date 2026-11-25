@@ -46,7 +46,7 @@ struct ScanSearchHarness {
             try? FileManager.default.removeItem(at: base)
         }
 
-        let count = 3_005
+        let count = 3_006
         let app = root.appendingPathComponent("ExampleTool.app", isDirectory: true)
         let appContents = app.appendingPathComponent("Contents", isDirectory: true)
         try FileManager.default.createDirectory(at: appContents, withIntermediateDirectories: true)
@@ -85,6 +85,11 @@ struct ScanSearchHarness {
             ofItemAtPath: previousPDF.path)
         try FileManager.default.setAttributes([.modificationDate: currentWeek.addingTimeInterval(3_600)],
             ofItemAtPath: currentPDF.path)
+        // Older than last week, with its own contents so it isn't a duplicate.
+        let olderPDF = root.appendingPathComponent("older-summary.pdf")
+        try Data("older".utf8).write(to: olderPDF)
+        try FileManager.default.setAttributes([.modificationDate: previousWeek.addingTimeInterval(-14 * 86_400)],
+            ofItemAtPath: olderPDF.path)
         let handle = try FileHandle(forWritingTo: largeVideo)
         try handle.truncate(atOffset: 101_000_000)
         try handle.close()
@@ -133,9 +138,18 @@ struct ScanSearchHarness {
         try require(FileIndex.searchPaths(terms: ["specialtoken"], root: root)?.count == 1,
                     "root-scoped FTS search was unavailable")
 
+        // "Last week" runs from the start of the previous week up to now.
         library.query = "pdfs from last week"
-        try require(waitUntil { library.visible.map(\.name) == ["weekly-report.pdf"] },
+        try require(waitUntil { library.visible.map(\.name) == ["current-report.pdf", "weekly-report.pdf"] },
                     "last-week PDF search did not use file dates and types")
+        try require(library.emptySearchHint == nil, "a search with results had an empty-search hint")
+        // The videos were written just now, so none is from yesterday; the
+        // hint should still find them on other dates.
+        library.query = "videos from yesterday"
+        try require(waitUntil { library.visible.isEmpty && library.emptySearchHint?.queryWithoutDate == "videos" },
+                    "empty dated search had no hint")
+        try require(library.emptySearchHint?.date.phrase == "from yesterday" && library.emptySearchHint?.newestMatch != nil,
+                    "empty-search hint did not find the newest video")
         library.query = "large videos"
         try require(waitUntil { library.visible.map(\.name) == ["holiday.mov"] },
                     "large videos search treated the file type as a name keyword")

@@ -28,5 +28,7 @@ jobs:
         run: ./scripts/test-duplicates.sh
       - name: Test scanning and search
         run: ./scripts/test-scan-search.sh
+      - name: Test search date phrases
+        run: ./scripts/test-search-dates.sh
       - name: Test Trash safety
         run: ./scripts/test-trash-safety.sh

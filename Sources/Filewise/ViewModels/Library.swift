@@ -45,6 +45,9 @@ final class Library: ObservableObject {
         }
     }
     @Published private(set) var visible: [FileItem] = []
+    /// Why a search with a date found nothing, when it did: the date range
+    /// searched, and the newest file that matches without the date.
+    @Published private(set) var emptySearchHint: EmptySearchHint?
     @Published private(set) var summaries: [String: LibrarySummary] = [:]
     @Published private(set) var downloadSources: [String: LibrarySummary] = [:]
     @Published var selectedIDs = Set<String>() {
@@ -575,11 +578,31 @@ final class Library: ObservableObject {
                 try? await Task.sleep(for: .milliseconds(60))
                 guard !Task.isCancelled else { return }
             }
-            let filtered = await Self.background {
-                FileSearch.filter(files, query: query, category: category, folder: folder, sortOrder: sortOrder)
+            let (filtered, hint) = await Self.background {
+                let filtered = FileSearch.filter(files, query: query, category: category, folder: folder, sortOrder: sortOrder)
+                return (filtered, filtered.isEmpty ? EmptySearchHint(query: query, files: files, folder: folder) : nil)
             }
             guard visibleGeneration == generation else { return }
+            emptySearchHint = hint
             Motion.animate(animated) { visible = filtered }
         }
+    }
+}
+
+/// Explains an empty search that had a date phrase: the range that was
+/// searched, and when the newest file matching the rest of the search is from.
+struct EmptySearchHint: Sendable, Equatable {
+    let date: FileSearch.DateFilter
+    let queryWithoutDate: String
+    /// Modification date of the newest file matching `queryWithoutDate`.
+    let newestMatch: Date?
+
+    init?(query: String, files: [FileItem], folder: URL?) {
+        guard let date = FileSearch.dateFilter(in: query) else { return nil }
+        self.date = date
+        queryWithoutDate = FileSearch.removingDate(from: query)
+        let matches = queryWithoutDate.isEmpty ? files
+            : FileSearch.filter(files, query: queryWithoutDate, category: "Home", folder: folder)
+        newestMatch = matches.lazy.map(\.modified).max()
     }
 }
