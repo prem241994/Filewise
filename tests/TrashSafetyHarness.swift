@@ -20,9 +20,9 @@ import os
             try Data(name.utf8).write(to: url)
             return FileItem(url: url, size: Int64(name.utf8.count), modified: Date(), changed: nil, duplicate: false, hash: nil, downloadSource: nil)
         }
-        func makeLibrary() -> Library {
+        func makeLibrary(folder: URL? = nil) -> Library {
             let library = Library()
-            library.folder = root
+            library.folder = folder ?? root
             library.trashOperations.moveToTrash = { url in
                 let target = trash.appendingPathComponent(url.lastPathComponent)
                 try FileManager.default.moveItem(at: url, to: target)
@@ -100,6 +100,28 @@ import os
         precondition(FileIndex.recordTrash(batchId: "interrupted", items: [(original: missing.path, trash: "", name: missing.lastPathComponent, size: 1)]))
         precondition(FileIndex.hasUnresolvedTrashMove(root: root))
         FileIndex.removeTrashRecords(originalPaths: [missing.path])
-        print("PASS: partial cancellation, journal failures, restart Undo, and safe rollback")
+
+        // A folder opened through a symlink, like /var for /private/var: the
+        // records hold the files' real paths, and the batch must still be found
+        // so the move counts as recorded and Undo is offered.
+        let linked = base.appendingPathComponent("linked")
+        try FileManager.default.createSymbolicLink(at: linked, withDestinationURL: root)
+        let seventh = try item("seventh.txt")
+        let viaLink = makeLibrary(folder: linked)
+        viaLink.files = [seventh]
+        viaLink.trashFiles(items: [seventh])
+        wait { !viaLink.isTrashing || viaLink.trashIsCompleted }
+        precondition(!FileManager.default.fileExists(atPath: seventh.url.path))
+        precondition(viaLink.bannerMessage?.contains("could not be saved") != true,
+                     "a move through a symlinked folder was reported as unrecorded: \(viaLink.bannerMessage ?? "")")
+        guard let linkedBatch = viaLink.lastTrashBatchId, viaLink.canUndoTrash else { fatalError("Undo was not offered through a symlinked folder") }
+        precondition(FileIndex.latestTrashBatch(root: linked) == linkedBatch)
+        viaLink.undoLastTrash()
+        wait { FileManager.default.fileExists(atPath: seventh.url.path) && FileIndex.fetchTrashBatch(batchId: linkedBatch).isEmpty }
+        let pending = root.appendingPathComponent("pending.txt")
+        precondition(FileIndex.recordTrash(batchId: "pending", items: [(original: pending.path, trash: "", name: pending.lastPathComponent, size: 1)]))
+        precondition(FileIndex.hasUnresolvedTrashMove(root: linked), "an interrupted move was missed through a symlinked folder")
+        FileIndex.removeTrashRecords(originalPaths: [pending.path])
+        print("PASS: partial cancellation, journal failures, restart Undo, safe rollback, and symlinked folders")
     }
 }

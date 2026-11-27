@@ -414,12 +414,13 @@ public enum FileIndex {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(database, "SELECT original_path FROM trash_manifest WHERE trash_path = ''", -1, &stmt, nil) == SQLITE_OK else { return false }
         defer { sqlite3_finalize(stmt) }
-        let rootPath = root.standardizedFileURL.path
-        let prefix = rootPath == "/" ? "/" : rootPath + "/"
+        // Both the given and canonical forms (/var and /private/var): records
+        // hold the paths the scanner saw, which can differ from `root`.
+        let prefixes = PathPrefixes.forFolder(root)
         while sqlite3_step(stmt) == SQLITE_ROW {
             guard let path = sqlite3_column_text(stmt, 0) else { continue }
             let original = String(cString: path)
-            if original.hasPrefix(prefix) && !FileManager.default.fileExists(atPath: original) { return true }
+            if prefixes.contains(where: original.hasPrefix) && !FileManager.default.fileExists(atPath: original) { return true }
         }
         return false
     }
@@ -471,11 +472,13 @@ public enum FileIndex {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(database, "SELECT original_path, batch_id FROM trash_manifest WHERE trash_path != '' ORDER BY trashed_at DESC", -1, &stmt, nil) == SQLITE_OK else { return nil }
         defer { sqlite3_finalize(stmt) }
-        let rootPath = root.standardizedFileURL.path
-        let prefix = rootPath == "/" ? "/" : rootPath + "/"
+        // Both path forms, as in hasUnresolvedTrashMove: otherwise a batch made
+        // in a folder reached through /var (or any symlink) is never found, so
+        // the move is reported as unrecorded and Undo isn't offered.
+        let prefixes = PathPrefixes.forFolder(root)
         while sqlite3_step(stmt) == SQLITE_ROW {
             guard let path = sqlite3_column_text(stmt, 0), let batch = sqlite3_column_text(stmt, 1) else { continue }
-            if String(cString: path).hasPrefix(prefix) { return String(cString: batch) }
+            if prefixes.contains(where: String(cString: path).hasPrefix) { return String(cString: batch) }
         }
         return nil
     }

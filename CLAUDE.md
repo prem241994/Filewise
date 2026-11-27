@@ -73,7 +73,7 @@ Two modules:
   - `ImageTextReader`: on-device text recognition (Vision `VNRecognizeTextRequest`, accurate) for screenshots, about 0.6 s each. After a successful scan, `Library.readImageText` reads new or changed screenshots in batches on a background task, reuses stored text for unchanged ones, drops text for removed ones, and shows progress in the sidebar. The inspector shows the stored text.
   - `FileWatcher`: FSEvents-based and debounced; it triggers refreshes.
   - `ScanToken`: lock-backed `Sendable` cancellation flag that the main actor shares with background work.
-  - `PathPrefixes`: returns both the given and canonical forms of a folder path (`/var` vs `/private/var`). FSEvents reports canonical paths, so **any path-prefix matching must use it**.
+  - `PathPrefixes`: returns every form of a folder path: as given, canonical (`/private/var/…`), and canonical without `/private` (`/var/…`, as `resolvingSymlinksInPath` reports it). FSEvents and the scanner report canonical paths, so **any path-prefix matching must use it** (the Trash batch lookups and the folder keep rule once didn't, and moves through a symlinked folder lost their Undo).
   - `CleanupSettings.current`: process-wide, lock-protected settings (large-file threshold, "old" age, ignored folders). The scanner, rules, and watcher read it. The app sets it from `AppSettings` (UserDefaults), and tests set it directly.
 
 - **`Sources/Filewise`**: the SwiftUI app.

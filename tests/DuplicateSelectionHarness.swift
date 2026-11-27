@@ -36,6 +36,20 @@ import Foundation
         precondition(KeepRule(rawValue: "folder:") == nil && KeepRule(rawValue: "bogus") == nil, "invalid rules were accepted")
         precondition(DuplicateSelection.foldersWithDuplicates(in: files).first == "/lib/Downloads",
                      "folders were not ordered by number of duplicates")
-        print("PASS: duplicate keep rules")
+        // The folder rule with a folder chosen through a symlink (like /var for
+        // /private/var), while the files carry their real paths: the copy in
+        // the chosen folder must still be kept.
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("filewise-keep-\(UUID().uuidString)")
+        let real = base.appendingPathComponent("real")
+        try! FileManager.default.createDirectory(at: real.appendingPathComponent("Documents"), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let link = base.appendingPathComponent("link")
+        try! FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
+        let realPath = URL(fileURLWithPath: real.path).resolvingSymlinksInPath().path
+        let inChosen = item("\(realPath)/Documents/Plan.pdf", days: 5, hash: 9)
+        let elsewhere = item("\(realPath)/Downloads/Plan copy.pdf", days: 1, hash: 9)
+        precondition(DuplicateSelection.extraCopies(in: [inChosen, elsewhere], keeping: .inFolder(link.path + "/Documents")) == [elsewhere.id],
+                     "folder rule did not recognize its folder through a symlink")
+        print("PASS: duplicate keep rules, including folders chosen through a symlink")
     }
 }

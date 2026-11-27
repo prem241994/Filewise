@@ -56,7 +56,11 @@ public enum DuplicateSelection {
     /// The file `rule` keeps from a group. Ties fall back to the oldest file,
     /// then to the path, so the choice never depends on scan order.
     public static func keeper(of group: [FileItem], rule: KeepRule) -> FileItem? {
-        group.min { a, b in
+        // Both forms of the chosen folder's path (/var and /private/var), worked
+        // out once rather than on every comparison.
+        var folderPrefixes: [String] = []
+        if case .inFolder(let path) = rule { folderPrefixes = PathPrefixes.forFolder(URL(fileURLWithPath: path)) }
+        return group.min { a, b in
             switch rule {
             case .oldest:
                 break
@@ -64,9 +68,9 @@ public enum DuplicateSelection {
                 if a.modified != b.modified { return a.modified > b.modified }
             case .shortestName:
                 if a.name.count != b.name.count { return a.name.count < b.name.count }
-            case .inFolder(let path):
-                let prefix = path.hasSuffix("/") ? path : path + "/"
-                let aInside = a.url.path.hasPrefix(prefix), bInside = b.url.path.hasPrefix(prefix)
+            case .inFolder:
+                let aInside = folderPrefixes.contains(where: a.url.path.hasPrefix)
+                let bInside = folderPrefixes.contains(where: b.url.path.hasPrefix)
                 if aInside != bInside { return aInside }
             }
             if a.modified != b.modified { return a.modified < b.modified }
