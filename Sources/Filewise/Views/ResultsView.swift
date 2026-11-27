@@ -197,55 +197,72 @@ struct ResultsView: View {
 
     // MARK: - Gallery
 
+    private static let tileSide: CGFloat = 150
+
     private var gallery: some View {
         GeometryReader { geometry in
-            let side: CGFloat = 150
-            let spacing = Theme.Spacing.l
-            let columns = max(1, Int((geometry.size.width - 2 * Theme.Spacing.page + spacing) / (side + 6 + spacing)))
+            let columns = galleryColumns(width: geometry.size.width)
             ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVGrid(columns: Array(repeating: GridItem(.fixed(side + 6), spacing: spacing), count: columns),
-                              alignment: .leading, spacing: spacing) {
-                        ForEach(library.visible) { item in
-                            MediaTile(item: item, side: side, isSelected: library.selectedIDs.contains(item.id),
-                                      onPlay: { play(item) })
-                                .id(item.id)
-                                .onTapGesture(count: 2) { FileActions.open([item]) }
-                                .onTapGesture { select(item) }
-                                .contextMenu {
-                                    FileMenuItems(items: contextItems(for: item), onPreview: onPreview, onTrash: onTrash)
-                                }
-                                .accessibilityAction { select(item) }
-                                .fileAccessibilityActions(item, onPreview: onPreview, onTrash: onTrash)
-                                .transition(.scale(scale: 0.85).combined(with: .opacity))
+                galleryGrid(columns: columns)
+                    .focusable()
+                    .focusEffectDisabled()
+                    .focused(isResultsFocused)
+                    .onKeyPress(keys: [.leftArrow, .rightArrow, .upArrow, .downArrow]) { press in
+                        moveSelection(press.key, columns: columns)
+                    }
+                    .onKeyPress(.return) {
+                        guard !library.selectedIDs.isEmpty else { return .ignored }
+                        FileActions.open(library.selectedFiles)
+                        return .handled
+                    }
+                    .onDeleteCommand {
+                        let selected = library.selectedFiles
+                        if !selected.isEmpty { onTrash(selected) }
+                    }
+                    .onChange(of: library.selectedIDs) { _, ids in
+                        if ids.count == 1, let id = ids.first {
+                            withAnimation(.easeInOut(duration: 0.15)) { proxy.scrollTo(id) }
                         }
                     }
-                    .padding(.horizontal, Theme.Spacing.page)
-                    .padding(.bottom, Theme.Spacing.xl)
-                }
-                .focusable()
-                .focusEffectDisabled()
-                .focused(isResultsFocused)
-                .onKeyPress(keys: [.leftArrow, .rightArrow, .upArrow, .downArrow]) { press in
-                    moveSelection(press.key, columns: columns)
-                }
-                .onKeyPress(.return) {
-                    guard !library.selectedIDs.isEmpty else { return .ignored }
-                    FileActions.open(library.selectedFiles)
-                    return .handled
-                }
-                .onDeleteCommand {
-                    let selected = library.selectedFiles
-                    if !selected.isEmpty { onTrash(selected) }
-                }
-                .onChange(of: library.selectedIDs) { _, ids in
-                    if ids.count == 1, let id = ids.first {
-                        withAnimation(.easeInOut(duration: 0.15)) { proxy.scrollTo(id) }
-                    }
-                }
-                .accessibilityLabel("Files")
+                    .accessibilityLabel("Files")
             }
         }
+    }
+
+    /// How many tiles fit across `width`.
+    private func galleryColumns(width: CGFloat) -> Int {
+        let spacing: CGFloat = Theme.Spacing.l
+        let available: CGFloat = width - 2 * Theme.Spacing.page + spacing
+        let perTile: CGFloat = Self.tileSide + 6 + spacing
+        return max(1, Int(available / perTile))
+    }
+
+    private func galleryGrid(columns: Int) -> some View {
+        let spacing: CGFloat = Theme.Spacing.l
+        let item = GridItem(.fixed(Self.tileSide + 6), spacing: spacing)
+        return ScrollView {
+            LazyVGrid(columns: Array(repeating: item, count: columns), alignment: .leading, spacing: spacing) {
+                ForEach(library.visible) { file in
+                    galleryTile(file)
+                }
+            }
+            .padding(.horizontal, Theme.Spacing.page)
+            .padding(.bottom, Theme.Spacing.xl)
+        }
+    }
+
+    private func galleryTile(_ item: FileItem) -> some View {
+        MediaTile(item: item, side: Self.tileSide, isSelected: library.selectedIDs.contains(item.id),
+                  onPlay: { play(item) })
+            .id(item.id)
+            .onTapGesture(count: 2) { FileActions.open([item]) }
+            .onTapGesture { select(item) }
+            .contextMenu {
+                FileMenuItems(items: contextItems(for: item), onPreview: onPreview, onTrash: onTrash)
+            }
+            .accessibilityAction { select(item) }
+            .fileAccessibilityActions(item, onPreview: onPreview, onTrash: onTrash)
+            .transition(.scale(scale: 0.85).combined(with: .opacity))
     }
 
     private func play(_ item: FileItem) {

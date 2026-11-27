@@ -76,30 +76,12 @@ struct SpaceRingView: View {
     // MARK: - Ring
 
     private func ring(_ slices: [Slice]) -> some View {
-        let focus = slices.first { $0.title == highlighted }
-        return ZStack {
+        ZStack {
             Circle().stroke(Theme.subtleFill, lineWidth: 22)
             ForEach(slices) { slice in
-                // A small gap between slices, unless the slice is too thin to show one.
-                let gap = slices.count > 1 && slice.share > 0.02 ? 0.004 : 0
-                Circle()
-                    .trim(from: (slice.start + gap) * progress, to: max(slice.start + gap, slice.end - gap) * progress)
-                    .stroke(color(slice.title),
-                            style: StrokeStyle(lineWidth: highlighted == slice.title ? 28 : 22, lineCap: .butt))
-                    .opacity(highlighted == nil || highlighted == slice.title ? 1 : 0.35)
-                    .rotationEffect(.degrees(-90))
+                arc(slice, showsGap: slices.count > 1)
             }
-            VStack(spacing: 2) {
-                Text(Theme.bytes(focus?.summary.bytes ?? total))
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                Text(focus.map { "\(percent($0.share)) · \($0.title)" } ?? "in this folder")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            .frame(width: 110)
+            ringCenter(slices.first { $0.title == highlighted })
         }
         .frame(width: 168, height: 168)
         .padding(4)
@@ -108,6 +90,39 @@ struct SpaceRingView: View {
         .accessibilityLabel("Space used in this folder: \(Theme.bytes(total))")
         .accessibilityAddTraits(.isImage)
         .accessibilityValue(slices.map { "\($0.title) \(percent($0.share))" }.joined(separator: ", "))
+    }
+
+    /// One slice of the ring. Values are typed explicitly so this type-checks
+    /// quickly.
+    private func arc(_ slice: Slice, showsGap: Bool) -> some View {
+        // A small gap between slices, unless the slice is too thin to show one.
+        let gap: Double = showsGap && slice.share > 0.02 ? 0.004 : 0
+        let from: Double = (slice.start + gap) * progress
+        let to: Double = max(slice.start + gap, slice.end - gap) * progress
+        let isFocused = highlighted == slice.title
+        let lineWidth: CGFloat = isFocused ? 28 : 22
+        let opacity: Double = highlighted == nil || isFocused ? 1 : 0.35
+        return Circle()
+            .trim(from: CGFloat(from), to: CGFloat(to))
+            .stroke(color(slice.title), style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
+            .opacity(opacity)
+            .rotationEffect(.degrees(-90))
+    }
+
+    /// The total, or the hovered slice's size and share.
+    private func ringCenter(_ focus: Slice?) -> some View {
+        let caption: String = focus.map { "\(percent($0.share)) · \($0.title)" } ?? "in this folder"
+        return VStack(spacing: 2) {
+            Text(Theme.bytes(focus?.summary.bytes ?? total))
+                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .contentTransition(.numericText())
+            Text(caption)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(width: 110)
     }
 
     // MARK: - Legend

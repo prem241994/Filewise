@@ -21,7 +21,13 @@ struct ContentView: View {
     private var isHome: Bool { library.category == "Home" && library.query.isEmpty }
     private var recentFiles: [FileItem] { Array(library.files.prefix(6)) }
 
+    // The body is split into stages so each one type-checks quickly: as one
+    // long modifier chain it exceeded Swift 6.1's type-checking time limit.
     var body: some View {
+        keyboardHandling(settingsObservers(observers(dialogs(window))))
+    }
+
+    private var window: some View {
         NavigationSplitView {
             SidebarView(library: library) { showRebuildConfirmation = true }
                 .navigationSplitViewColumnWidth(min: 190, ideal: 220, max: 300)
@@ -43,107 +49,130 @@ struct ContentView: View {
             }
         }
         .dropDestination(for: URL.self) { urls, _ in
-            guard !library.isTrashing else {
-                library.bannerMessage = "Finish the Trash operation before changing folders."
-                return false
-            }
-            guard urls.count == 1, let url = urls.first, url.isFileURL,
-                  let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey]),
-                  values.isDirectory == true, values.isPackage != true else {
-                library.bannerMessage = "Drop one folder to scan it."
-                return false
-            }
-            library.selectLocation(url, rememberCustom: true)
-            return true
+            handleDrop(urls)
         } isTargeted: { folderDropTargeted = $0 }
-        .confirmationDialog("Rebuild the file index?", isPresented: $showRebuildConfirmation) {
-            Button("Rebuild Index") { library.rebuildIndex() }
-        } message: {
-            Text("Filewise will rescan the selected folder. Trash Undo records are kept.")
+    }
+
+    /// Scans a single dropped folder.
+    private func handleDrop(_ urls: [URL]) -> Bool {
+        guard !library.isTrashing else {
+            library.bannerMessage = "Finish the Trash operation before changing folders."
+            return false
         }
-        .confirmationDialog(trashTitle, isPresented: $showTrashConfirmation, titleVisibility: .visible) {
-            Button("Move to Trash", role: .destructive) {
-                library.trashFiles(items: pendingTrash)
-                pendingTrash = []
+        guard urls.count == 1, let url = urls.first, url.isFileURL,
+              let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey]),
+              values.isDirectory == true, values.isPackage != true else {
+            library.bannerMessage = "Drop one folder to scan it."
+            return false
+        }
+        library.selectLocation(url, rememberCustom: true)
+        return true
+    }
+
+    /// Confirmation dialogs, sheets, and Quick Look.
+    private func dialogs<Content: View>(_ content: Content) -> some View {
+        content
+            .confirmationDialog("Rebuild the file index?", isPresented: $showRebuildConfirmation) {
+                Button("Rebuild Index") { library.rebuildIndex() }
+            } message: {
+                Text("Filewise will rescan the selected folder. Trash Undo records are kept.")
             }
-            Button("Cancel", role: .cancel) { pendingTrash = [] }
-        } message: {
-            Text(trashMessage)
-        }
-        .sheet(item: $store.paywall) { request in
-            PaywallView(store: store, request: request)
-        }
-        .onAppear {
-            focusRequestedSearch()
-            // Give the saved folder's scan a moment to start, so the sheet can name its size.
-            Task {
-                try? await Task.sleep(for: .seconds(1))
+            .confirmationDialog(trashTitle, isPresented: $showTrashConfirmation, titleVisibility: .visible) {
+                Button("Move to Trash", role: .destructive) {
+                    library.trashFiles(items: pendingTrash)
+                    pendingTrash = []
+                }
+                Button("Cancel", role: .cancel) { pendingTrash = [] }
+            } message: {
+                Text(trashMessage)
+            }
+            .sheet(item: $store.paywall) { request in
+                PaywallView(store: store, request: request)
+            }
+            .quickLookPreview($library.previewURL)
+            .sheet(isPresented: $library.isTrashing) {
+                TrashProgressDialog(library: library)
+            }
+    }
+
+    /// Reactions to state changes: the trial prompt and VoiceOver announcements.
+    private func observers<Content: View>(_ content: Content) -> some View {
+        content
+            .onAppear {
+                focusRequestedSearch()
+                // Give the saved folder's scan a moment to start, so the sheet can name its size.
+                Task {
+                    try? await Task.sleep(for: .seconds(1))
+                    promptIfTrialEnded()
+                }
+            }
+            .onChange(of: store.status) { promptIfTrialEnded() }
+            .onChange(of: library.scanning) { _, scanning in
                 promptIfTrialEnded()
+                // VoiceOver users hear when a scan ends, since the sidebar status changes silently.
+                if !scanning { announce(library.status) }
             }
-        }
-        .onChange(of: store.status) { promptIfTrialEnded() }
-        .onChange(of: library.scanning) { _, scanning in
-            promptIfTrialEnded()
-            // VoiceOver users hear when a scan ends, since the sidebar status changes silently.
-            if !scanning { announce(library.status) }
-        }
-        .onChange(of: library.bannerMessage) { _, message in
-            if let message { announce(message + (library.canUndoTrash ? " Undo is available." : "")) }
-        }
-        .onChange(of: library.trashIsCompleted) { _, completed in
-            if completed {
-                announce("Moved \(Theme.count(library.trashCurrentCount, "file")) to the Trash.")
+            .onChange(of: library.bannerMessage) { _, message in
+                if let message { announce(bannerAnnouncement(message)) }
             }
-        }
-        .onChange(of: navigation.searchRequested) { _, requested in
-            if requested { focusRequestedSearch() }
-        }
-        .onChange(of: settings.largeFileBytes) { library.applySettings(rescan: false) }
-        .onChange(of: settings.oldAfterDays) { library.applySettings(rescan: false) }
-        .onChange(of: settings.ignoredFolders) { library.applySettings(rescan: true) }
-        .quickLookPreview($library.previewURL)
-        .sheet(isPresented: $library.isTrashing) {
-            TrashProgressDialog(library: library)
-        }
-        .onKeyPress(.space) {
-            guard isResultsFocused, let item = library.selectedFiles.first else { return .ignored }
-            library.previewURL = library.previewURL == nil ? item.url : nil
-            return .handled
-        }
-        .onKeyPress(.upArrow) {
-            guard isResultsFocused, isHome else { return .ignored }
-            moveRecentSelection(by: -1)
-            return .handled
-        }
-        .onKeyPress(.downArrow) {
-            guard isResultsFocused, isHome else { return .ignored }
-            moveRecentSelection(by: 1)
-            return .handled
-        }
-        .onKeyPress(.return) {
-            guard isResultsFocused, isHome, !library.selectedIDs.isEmpty else { return .ignored }
-            FileActions.open(library.selectedFiles)
-            return .handled
-        }
-        .onKeyPress(.delete) {
-            // The results table handles Delete through onDeleteCommand.
-            guard isResultsFocused, isHome, !library.selectedIDs.isEmpty else { return .ignored }
-            requestTrash(library.selectedFiles)
-            return .handled
-        }
-        .onKeyPress(.escape) {
-            if isSearchFocused {
-                isSearchFocused = false
-                showSearchSuggestions = false
-                isResultsFocused = true
+            .onChange(of: library.trashIsCompleted) { _, completed in
+                if completed { announce(trashAnnouncement) }
+            }
+    }
+
+    /// Search focus requests from the menu, and Settings changes.
+    private func settingsObservers<Content: View>(_ content: Content) -> some View {
+        content
+            .onChange(of: navigation.searchRequested) { _, requested in
+                if requested { focusRequestedSearch() }
+            }
+            .onChange(of: settings.largeFileBytes) { library.applySettings(rescan: false) }
+            .onChange(of: settings.oldAfterDays) { library.applySettings(rescan: false) }
+            .onChange(of: settings.ignoredFolders) { library.applySettings(rescan: true) }
+    }
+
+    /// Keyboard shortcuts for the results and Home lists.
+    private func keyboardHandling<Content: View>(_ content: Content) -> some View {
+        content
+            .onKeyPress(.space) {
+                guard isResultsFocused, let item = library.selectedFiles.first else { return .ignored }
+                library.previewURL = library.previewURL == nil ? item.url : nil
                 return .handled
             }
-            if !library.selectedIDs.isEmpty {
-                library.deselectAll()
+            .onKeyPress(.upArrow) {
+                guard isResultsFocused, isHome else { return .ignored }
+                moveRecentSelection(by: -1)
                 return .handled
             }
-            return .ignored
-        }
+            .onKeyPress(.downArrow) {
+                guard isResultsFocused, isHome else { return .ignored }
+                moveRecentSelection(by: 1)
+                return .handled
+            }
+            .onKeyPress(.return) {
+                guard isResultsFocused, isHome, !library.selectedIDs.isEmpty else { return .ignored }
+                FileActions.open(library.selectedFiles)
+                return .handled
+            }
+            .onKeyPress(.delete) {
+                // The results table handles Delete through onDeleteCommand.
+                guard isResultsFocused, isHome, !library.selectedIDs.isEmpty else { return .ignored }
+                requestTrash(library.selectedFiles)
+                return .handled
+            }
+            .onKeyPress(.escape) {
+                if isSearchFocused {
+                    isSearchFocused = false
+                    showSearchSuggestions = false
+                    isResultsFocused = true
+                    return .handled
+                }
+                if !library.selectedIDs.isEmpty {
+                    library.deselectAll()
+                    return .handled
+                }
+                return .ignored
+            }
     }
 
     // MARK: - Detail
@@ -157,78 +186,72 @@ struct ContentView: View {
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
-            if isHome {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        HomeView(library: library, recentFiles: recentFiles,
-                                 onPreview: preview, onTrash: requestTrash)
-                            .padding(Theme.Spacing.page)
-                    }
-                    .focusable()
-                    .focusEffectDisabled()
-                    .focused($isResultsFocused)
-                    .onChange(of: library.selectedIDs) { _, ids in
-                        if ids.count == 1, let id = ids.first {
-                            withAnimation(.easeInOut(duration: 0.15)) { proxy.scrollTo(id) }
-                        }
-                    }
-                }
-            } else {
-                ResultsView(library: library, isResultsFocused: $isResultsFocused,
-                            onPreview: preview, onTrash: requestTrash)
-            }
+            page
         }
         .motion(value: library.bannerMessage)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if !library.selectedIDs.isEmpty { selectionBar }
         }
         .navigationTitle(library.folder?.lastPathComponent ?? "Filewise")
-        .navigationSubtitle(library.folder == nil ? "" :
-            "\(Theme.count(library.files.count, "file")) · \(Theme.bytes(library.summary(for: "Home").bytes))")
-        .toolbar {
-            ToolbarItem(placement: .principal) { searchField }
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button {
-                    if let folder = library.folder { library.scan(folder) }
-                } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                        .symbolEffect(.pulse, isActive: library.scanning)
+        .navigationSubtitle(windowSubtitle)
+        .toolbar { toolbarContent }
+    }
+
+    private var windowSubtitle: String {
+        guard library.folder != nil else { return "" }
+        return "\(Theme.count(library.files.count, "file")) · \(Theme.bytes(library.summary(for: "Home").bytes))"
+    }
+
+    /// Home, or the results for a category or search.
+    @ViewBuilder private var page: some View {
+        if isHome {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    HomeView(library: library, recentFiles: recentFiles,
+                             onPreview: preview, onTrash: requestTrash)
+                        .padding(Theme.Spacing.page)
                 }
-                .help("Rescan the selected folder")
-                .disabled(library.folder == nil || library.scanning)
-                Button {
-                    navigation.showInspector.toggle()
-                } label: {
-                    Label("Inspector", systemImage: "sidebar.trailing")
+                .focusable()
+                .focusEffectDisabled()
+                .focused($isResultsFocused)
+                .onChange(of: library.selectedIDs) { _, ids in
+                    if ids.count == 1, let id = ids.first {
+                        withAnimation(.easeInOut(duration: 0.15)) { proxy.scrollTo(id) }
+                    }
                 }
-                .help(navigation.showInspector ? "Hide file details" : "Show file details")
-                .disabled(library.folder == nil)
             }
+        } else {
+            ResultsView(library: library, isResultsFocused: $isResultsFocused,
+                        onPreview: preview, onTrash: requestTrash)
+        }
+    }
+
+    @ToolbarContentBuilder private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .principal) { searchField }
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button {
+                if let folder = library.folder { library.scan(folder) }
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+                    .symbolEffect(.pulse, isActive: library.scanning)
+            }
+            .help("Rescan the selected folder")
+            .disabled(library.folder == nil || library.scanning)
+            Button {
+                navigation.showInspector.toggle()
+            } label: {
+                Label("Inspector", systemImage: "sidebar.trailing")
+            }
+            .help(navigation.showInspector ? "Hide file details" : "Show file details")
+            .disabled(library.folder == nil)
         }
     }
 
     private var searchField: some View {
-        HStack(spacing: Theme.Spacing.xs) {
+        let border: Color = isSearchFocused ? Color.accentColor.opacity(0.7) : Theme.hairline
+        return HStack(spacing: Theme.Spacing.xs) {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary).accessibilityHidden(true)
-            TextField(Self.searchPrompt, text: $library.query)
-                .textFieldStyle(.plain)
-                .focused($isSearchFocused)
-                .accessibilityLabel("Search files")
-                .accessibilityHint("Search by name, type, date, size, source, or location")
-                .onKeyPress(.downArrow) {
-                    let first = isHome ? recentFiles.first : library.visible.first
-                    guard let first else { return .ignored }
-                    showSearchSuggestions = false
-                    isSearchFocused = false
-                    isResultsFocused = true
-                    if library.selectedIDs.isEmpty { library.selectedIDs = [first.id] }
-                    return .handled
-                }
-                .onSubmit {
-                    guard !library.query.isEmpty else { return }
-                    library.addRecentSearch(library.query)
-                    showSearchSuggestions = false
-                }
+            searchTextField
             if !library.query.isEmpty {
                 Button { library.query = "" } label: {
                     Image(systemName: "xmark.circle.fill")
@@ -237,22 +260,12 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
                 .accessibilityLabel("Clear search")
             }
-            Button { showSearchSuggestions.toggle() } label: {
-                Image(systemName: "sparkles")
-                    .foregroundStyle(showSearchSuggestions ? Color.accentColor : .secondary)
-                    .symbolEffect(.bounce, value: showSearchSuggestions)
-            }
-            .buttonStyle(.borderless)
-            .help("Search suggestions and recent searches")
-            .accessibilityLabel("Search suggestions and recent searches")
+            suggestionsButton
         }
         .padding(.horizontal, Theme.Spacing.s)
         .frame(minWidth: 240, idealWidth: 400, maxWidth: 460, minHeight: 28)
         .background(Theme.subtleFill, in: RoundedRectangle(cornerRadius: 7))
-        .overlay(
-            RoundedRectangle(cornerRadius: 7)
-                .stroke(isSearchFocused ? Color.accentColor.opacity(0.7) : Theme.hairline)
-        )
+        .overlay(RoundedRectangle(cornerRadius: 7).stroke(border))
         .popover(isPresented: $showSearchSuggestions, arrowEdge: .bottom) {
             SearchSuggestionsView(library: library) { selectedQuery in
                 library.query = selectedQuery
@@ -263,6 +276,43 @@ struct ContentView: View {
         .onChange(of: isSearchFocused) { _, focused in
             if focused && library.query.isEmpty { showSearchSuggestions = true }
         }
+    }
+
+    private var searchTextField: some View {
+        TextField(Self.searchPrompt, text: $library.query)
+            .textFieldStyle(.plain)
+            .focused($isSearchFocused)
+            .accessibilityLabel("Search files")
+            .accessibilityHint("Search by name, type, date, size, source, or location")
+            .onKeyPress(.downArrow) { moveFromSearchToResults() }
+            .onSubmit {
+                guard !library.query.isEmpty else { return }
+                library.addRecentSearch(library.query)
+                showSearchSuggestions = false
+            }
+    }
+
+    /// ↓ in the search field moves focus to the first result.
+    private func moveFromSearchToResults() -> KeyPress.Result {
+        let first = isHome ? recentFiles.first : library.visible.first
+        guard let first else { return .ignored }
+        showSearchSuggestions = false
+        isSearchFocused = false
+        isResultsFocused = true
+        if library.selectedIDs.isEmpty { library.selectedIDs = [first.id] }
+        return .handled
+    }
+
+    private var suggestionsButton: some View {
+        let tint: AnyShapeStyle = showSearchSuggestions ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary)
+        return Button { showSearchSuggestions.toggle() } label: {
+            Image(systemName: "sparkles")
+                .foregroundStyle(tint)
+                .symbolEffect(.bounce, value: showSearchSuggestions)
+        }
+        .buttonStyle(.borderless)
+        .help("Search suggestions and recent searches")
+        .accessibilityLabel("Search suggestions and recent searches")
     }
 
     private func bannerView(_ message: String) -> some View {
@@ -382,12 +432,28 @@ struct ContentView: View {
         return message
     }
 
+    private func bannerAnnouncement(_ message: String) -> String {
+        library.canUndoTrash ? "\(message) Undo is available." : message
+    }
+
+    private var trashAnnouncement: String {
+        "Moved \(Theme.count(library.trashCurrentCount, "file")) to the Trash."
+    }
+
     private func moveRecentSelection(by delta: Int) {
         let items = recentFiles
         guard !items.isEmpty else { return }
-        let current = library.selectedIDs.count == 1
-            ? items.firstIndex { library.selectedIDs.contains($0.id) } : nil
-        let index = current.map { max(0, min(items.count - 1, $0 + delta)) } ?? (delta > 0 ? 0 : items.count - 1)
+        let last = items.count - 1
+        var current: Int?
+        if library.selectedIDs.count == 1 {
+            current = items.firstIndex { library.selectedIDs.contains($0.id) }
+        }
+        let index: Int
+        if let current {
+            index = max(0, min(last, current + delta))
+        } else {
+            index = delta > 0 ? 0 : last
+        }
         library.selectedIDs = [items[index].id]
         if library.previewURL != nil { library.previewURL = items[index].url }
     }

@@ -304,6 +304,58 @@ struct ScanNoticeView: View {
     }
 }
 
+/// The tinted card both the Library and Clean Up cards use: a soft gradient
+/// in the category color, a border, and a small lift on hover. Values are
+/// typed explicitly so the views type-check quickly (Swift 6.1 timed out).
+private struct TintedCard: ViewModifier {
+    let color: Color
+    let isHovering: Bool
+    /// Gradient opacities (top, bottom) in light and dark appearance.
+    let light: (top: Double, bottom: Double)
+    let dark: (top: Double, bottom: Double)
+    let restingBorder: Double
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        let tint = colorScheme == .dark ? dark : light
+        let shape = RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous)
+        let gradient = LinearGradient(colors: [color.opacity(tint.top), color.opacity(tint.bottom)],
+                                      startPoint: .topLeading, endPoint: .bottomTrailing)
+        let borderOpacity: Double = isHovering ? 0.45 : restingBorder
+        let shadowOpacity: Double = isHovering ? 0.12 : 0.04
+        let shadowRadius: CGFloat = isHovering ? 10 : 3
+        let shadowY: CGFloat = isHovering ? 4 : 1
+        let scale: CGFloat = isHovering ? 1.015 : 1
+        return content
+            .background(gradient)
+            .overlay(shape.strokeBorder(color.opacity(borderOpacity), lineWidth: 1))
+            .clipShape(shape)
+            .shadow(color: Color.black.opacity(shadowOpacity), radius: shadowRadius, y: shadowY)
+            .scaleEffect(scale)
+            .contentShape(shape)
+    }
+}
+
+/// A rounded square badge with a white symbol on the category's gradient.
+private struct CategoryBadge: View {
+    let symbol: String
+    let color: Color
+    let side: CGFloat
+    let symbolSize: CGFloat
+    let cornerRadius: CGFloat
+
+    var body: some View {
+        let gradient = LinearGradient(colors: [color.opacity(0.85), color],
+                                      startPoint: .topLeading, endPoint: .bottomTrailing)
+        Image(systemName: symbol)
+            .font(.system(size: symbolSize, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: side, height: side)
+            .background(gradient, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .shadow(color: color.opacity(0.35), radius: side / 9, y: side / 18)
+    }
+}
+
 /// A Library category card: a colored badge, a fanned stack of the newest
 /// files' previews, and the category's count, size, and share of the folder.
 private struct LibraryCard: View {
@@ -314,48 +366,22 @@ private struct LibraryCard: View {
     let action: () -> Void
 
     @State private var isHovering = false
-    @Environment(\.colorScheme) private var colorScheme
 
     private var color: Color { Theme.color(for: title) }
     private var isEmpty: Bool { summary.count == 0 }
     private var share: Double { totalBytes > 0 ? Double(summary.bytes) / Double(totalBytes) : 0 }
+    private var detail: String {
+        isEmpty ? "No files" : "\(Theme.count(summary.count, "item")) · \(Theme.bytes(summary.bytes))"
+    }
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .top) {
-                    Image(systemName: Theme.icon(for: title))
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 36, height: 36)
-                        .background(
-                            LinearGradient(colors: [color.opacity(0.85), color],
-                                           startPoint: .topLeading, endPoint: .bottomTrailing),
-                            in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .shadow(color: color.opacity(0.35), radius: 4, y: 2)
-                    Spacer()
-                    previewStack
-                }
-                Spacer(minLength: Theme.Spacing.l)
-                Text(title).font(.system(size: 15, weight: .semibold))
-                Text(isEmpty ? "No files" : "\(Theme.count(summary.count, "item")) · \(Theme.bytes(summary.bytes))")
-                    .contentTransition(.numericText())
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 2)
-                shareBar.padding(.top, Theme.Spacing.s)
-            }
-            .padding(Theme.Spacing.l)
-            .frame(maxWidth: .infinity, minHeight: 150, alignment: .leading)
-            .background(background)
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous)
-                    .strokeBorder(color.opacity(isHovering ? 0.45 : 0.18), lineWidth: 1))
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous))
-            .shadow(color: .black.opacity(isHovering ? 0.12 : 0.04), radius: isHovering ? 10 : 3, y: isHovering ? 4 : 1)
-            .scaleEffect(isHovering ? 1.015 : 1)
-            .opacity(isEmpty ? 0.7 : 1)
-            .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous))
+            content
+                .padding(Theme.Spacing.l)
+                .frame(maxWidth: .infinity, minHeight: 150, alignment: .leading)
+                .modifier(TintedCard(color: color, isHovering: isHovering,
+                                     light: (0.16, 0.05), dark: (0.28, 0.10), restingBorder: 0.18))
+                .opacity(isEmpty ? 0.7 : 1)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -365,26 +391,45 @@ private struct LibraryCard: View {
         .accessibilityHint("Shows files in this category")
     }
 
-    private var background: some View {
-        LinearGradient(colors: [color.opacity(colorScheme == .dark ? 0.28 : 0.16),
-                                color.opacity(colorScheme == .dark ? 0.10 : 0.05)],
-                       startPoint: .topLeading, endPoint: .bottomTrailing)
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top) {
+                CategoryBadge(symbol: Theme.icon(for: title), color: color, side: 36, symbolSize: 16, cornerRadius: 10)
+                Spacer()
+                previewStack
+            }
+            Spacer(minLength: Theme.Spacing.l)
+            Text(title).font(.system(size: 15, weight: .semibold))
+            Text(detail)
+                .contentTransition(.numericText())
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.top, 2)
+            shareBar.padding(.top, Theme.Spacing.s)
+        }
     }
 
     /// Up to three of the newest files, fanned like a small stack of cards.
     private var previewStack: some View {
         ZStack {
             ForEach(Array(previews.enumerated().reversed()), id: \.element.id) { index, item in
-                FileThumbnail(item: item, size: 40, cornerRadius: 7, showsPlayBadge: false)
-                    .padding(2)
-                    .background(.background, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                    .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
-                    .rotationEffect(.degrees(Double(index - 1) * 8))
-                    .offset(x: CGFloat(index - 1) * -14)
+                previewCard(item, position: index - 1)
             }
         }
         .frame(width: 76, height: 48, alignment: .trailing)
         .accessibilityHidden(true)
+    }
+
+    /// One card of the stack; `position` is -1, 0, or 1 from front to back.
+    private func previewCard(_ item: FileItem, position: Int) -> some View {
+        let angle: Double = Double(position) * 8
+        let shift: CGFloat = CGFloat(position) * -14
+        return FileThumbnail(item: item, size: 40, cornerRadius: 7, showsPlayBadge: false)
+            .padding(2)
+            .background(.background, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .shadow(color: Color.black.opacity(0.15), radius: 2, y: 1)
+            .rotationEffect(.degrees(angle))
+            .offset(x: shift)
     }
 
     /// The category's share of the folder's total size.
@@ -392,13 +437,16 @@ private struct LibraryCard: View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
                 Capsule().fill(color.opacity(0.15))
-                Capsule().fill(color)
-                    .frame(width: share > 0 ? max(4, geometry.size.width * share) : 0)
+                Capsule().fill(color).frame(width: barWidth(in: geometry.size.width))
             }
         }
         .frame(height: 4)
         .help(share > 0 ? "\(Int((share * 100).rounded()))% of this folder’s size" : "")
         .accessibilityHidden(true)
+    }
+
+    private func barWidth(in width: CGFloat) -> CGFloat {
+        share > 0 ? max(4, width * CGFloat(share)) : 0
     }
 }
 
@@ -410,60 +458,17 @@ private struct CleanupCard: View {
     let action: () -> Void
 
     @State private var isHovering = false
-    @Environment(\.colorScheme) private var colorScheme
 
     private var color: Color { Theme.color(for: category) }
     private var isEmpty: Bool { summary.count == 0 }
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Image(systemName: Theme.icon(for: category))
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 30, height: 30)
-                        .background(
-                            LinearGradient(colors: [color.opacity(0.85), color],
-                                           startPoint: .topLeading, endPoint: .bottomTrailing),
-                            in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .shadow(color: color.opacity(0.35), radius: 3, y: 1.5)
-                    Spacer()
-                    if !isEmpty {
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-                Spacer(minLength: Theme.Spacing.m)
-                Text(Theme.title(for: category))
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Text(isEmpty ? "All clear" : Theme.bytes(summary.bytes))
-                    .contentTransition(.numericText())
-                    .font(.system(size: 22, weight: .semibold, design: .rounded))
-                    .foregroundStyle(isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                Text(isEmpty ? "Nothing to review" : Theme.count(summary.count, "file") + " to review")
-                    .contentTransition(.numericText())
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(Theme.Spacing.l)
-            .frame(maxWidth: .infinity, minHeight: 134, alignment: .leading)
-            .background(
-                LinearGradient(colors: [color.opacity(colorScheme == .dark ? 0.22 : 0.12),
-                                        color.opacity(colorScheme == .dark ? 0.07 : 0.03)],
-                               startPoint: .topLeading, endPoint: .bottomTrailing))
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous)
-                    .strokeBorder(color.opacity(isHovering ? 0.45 : 0.15), lineWidth: 1))
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous))
-            .shadow(color: .black.opacity(isHovering ? 0.12 : 0.04), radius: isHovering ? 10 : 3, y: isHovering ? 4 : 1)
-            .scaleEffect(isHovering ? 1.015 : 1)
-            .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous))
+            content
+                .padding(Theme.Spacing.l)
+                .frame(maxWidth: .infinity, minHeight: 134, alignment: .leading)
+                .modifier(TintedCard(color: color, isHovering: isHovering,
+                                     light: (0.12, 0.03), dark: (0.22, 0.07), restingBorder: 0.15))
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -471,5 +476,39 @@ private struct CleanupCard: View {
         }
         .accessibilityLabel("\(Theme.title(for: category)), \(Theme.count(summary.count, "file")), \(Theme.bytes(summary.bytes))")
         .accessibilityHint("Review cleanup candidates")
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                CategoryBadge(symbol: Theme.icon(for: category), color: color, side: 30, symbolSize: 14, cornerRadius: 8)
+                Spacer()
+                if !isEmpty {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            Spacer(minLength: Theme.Spacing.m)
+            Text(Theme.title(for: category))
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            amount
+            Text(isEmpty ? "Nothing to review" : Theme.count(summary.count, "file") + " to review")
+                .contentTransition(.numericText())
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var amount: some View {
+        let style: AnyShapeStyle = isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary)
+        return Text(isEmpty ? "All clear" : Theme.bytes(summary.bytes))
+            .contentTransition(.numericText())
+            .font(.system(size: 22, weight: .semibold, design: .rounded))
+            .foregroundStyle(style)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
     }
 }

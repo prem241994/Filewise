@@ -53,6 +53,12 @@ For **accessibility**, a step `name:Accessibility:<category>` writes `name-<appe
 
 - Both modules compile with `-swift-version 6` and complete data-race checking. The code must build with no concurrency errors.
 - CI runs on `macos-15` with **Swift 6.1**, while the local Mac has a newer Swift. Don't use Swift 6.2+ features such as `@concurrent`, `isolated deinit`, `nonisolated(nonsending)`, or default main-actor isolation.
+- Swift 6.1 type-checks SwiftUI much more slowly than the local compiler and fails with "unable to type-check this expression in reasonable time" on long view bodies. Keep view bodies small: split long modifier chains into helper functions or `ViewModifier`s, give ternaries explicit types (`let radius: CGFloat = hovering ? 10 : 3`), and avoid `+` on strings around `?:`. Before pushing view changes, check that no body takes more than about 200 ms locally:
+  ```sh
+  source scripts/common.sh && swiftc "${swift_flags[@]}" "${app_frameworks[@]}" "${core_link_flags[@]}" -wmo -typecheck \
+      -Xfrontend -debug-time-function-bodies Sources/Filewise/**/*.swift 2>&1 | grep -E "^[0-9.]+ms" | sort -rn | head
+  ```
+- After pushing, check that the CI run passed. Compiler errors appear as annotations on the run's summary page.
 
 ## Architecture
 
