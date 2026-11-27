@@ -1,7 +1,9 @@
 #!/bin/zsh
 # Captures the UI in light and dark mode against a disposable sample folder.
 # Usage: scripts/snapshot-ui.sh [output-dir] [steps]
-# Steps are comma-separated name:category[:query][:select|play|scroll] entries.
+# Steps are comma-separated name:category[:query][:actions] entries; see tools/SnapshotHook.swift.
+# FILEWISE_SNAPSHOT_APPEARANCES picks "light", "dark", or "light dark" (default).
+# FILEWISE_SNAPSHOT_WIDTH / FILEWISE_SNAPSHOT_HEIGHT set the window size in points.
 # Set FILEWISE_LICENSE (trial:<days>|expired|unlocked; default trial:5) for the trial state.
 # Set FILEWISE_SNAPSHOT_SOURCE to capture a copy of an existing folder.
 set -e
@@ -26,8 +28,12 @@ swiftc "${swift_flags[@]}" "${app_frameworks[@]}" "${core_link_flags[@]}" -D FIL
 codesign --force --sign - "$app_dir" >/dev/null
 
 # FILEWISE_SNAPSHOT_SOURCE captures a copy of an existing folder instead.
+folder=$fixture
 if [[ -n $FILEWISE_SNAPSHOT_SOURCE ]]; then
-    ditto "$FILEWISE_SNAPSHOT_SOURCE" "$fixture"
+    # Copied under its own name, so the window shows it (e.g. "My Files").
+    folder="$fixture/${FILEWISE_SNAPSHOT_SOURCE:t}"
+    # cp -c clones (APFS): no extra disk space, and sparse files stay sparse (ditto fills them in).
+    cp -cpR "$FILEWISE_SNAPSHOT_SOURCE" "$folder"
 else
     # Sample library: documents, a duplicate, old and new screenshots, downloads
     # with origins, and sparse large media files.
@@ -53,9 +59,9 @@ else
     touch -t 202609011012 "$fixture/Desktop/Screenshot 2026-09-01 at 10.12.03.png" "$fixture/Downloads/Brand Kit.zip" "$fixture/Downloads/Installer.dmg"
 fi
 
-for appearance in light dark; do
+for appearance in ${=FILEWISE_SNAPSHOT_APPEARANCES:-light dark}; do
     FILEWISE_TEST_DATABASE_DIRECTORY="$db_dir/$appearance" FILEWISE_SNAPSHOT_DIR="$output" \
-    FILEWISE_SNAPSHOT_FOLDER="$fixture" FILEWISE_SNAPSHOT_APPEARANCE="$appearance" \
+    FILEWISE_SNAPSHOT_FOLDER="$folder" FILEWISE_SNAPSHOT_APPEARANCE="$appearance" \
     FILEWISE_SNAPSHOT_STEPS="$steps" FILEWISE_LICENSE=${FILEWISE_LICENSE:-trial:5} \
     "$app_dir/Contents/MacOS/Filewise" >/dev/null 2>&1 || true
 done

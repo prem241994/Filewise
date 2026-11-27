@@ -18,6 +18,9 @@ struct FilewiseApp: App {
         Window("Filewise", id: "main") {
             ContentView()
                 .environmentObject(navigation)
+                #if FILEWISE_SNAPSHOT
+                .onAppear { SnapshotHook.navigation = navigation }
+                #endif
                 .environmentObject(settings)
                 .environmentObject(store)
         }

@@ -10,12 +10,16 @@ import ApplicationServices
 enum SnapshotHook {
     static weak var library: Library?
     static weak var store: Store?
+    static weak var navigation: FilewiseNavigation?
 
     static func install() {
         let env = ProcessInfo.processInfo.environment
         guard let output = env["FILEWISE_SNAPSHOT_DIR"], let folder = env["FILEWISE_SNAPSHOT_FOLDER"] else { return }
         let appearance = env["FILEWISE_SNAPSHOT_APPEARANCE"] ?? "light"
-        // Each step is name:category[:query][:select|play|scroll|scroll2|end]; category "Paywall" captures the
+        // Each step is name:category[:query][:actions]. Actions, joined with "+": select (the first
+        // result), play, scroll, scroll2, end (scroll to the bottom), hide (no inspector), and trash
+        // (move the category's files to the Trash, capture Home with the Undo banner, then Undo).
+        // Category "Paywall" captures the
         // unlock sheet, category "Settings" captures the
         // Settings window, and a first step with category "Welcome" captures the first-run page.
         let steps = (env["FILEWISE_SNAPSHOT_STEPS"] ?? "home:Home").split(separator: ",").map(String.init)
@@ -23,10 +27,14 @@ enum SnapshotHook {
             try? await Task.sleep(for: .seconds(1))
             NSApp.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
             // FILEWISE_SNAPSHOT_WIDTH sets the window width, e.g. 860 to check the narrowest layout.
-            if let width = env["FILEWISE_SNAPSHOT_WIDTH"].flatMap(Double.init),
-               let window = NSApp.windows.first(where: { $0.isVisible && $0.frame.width > 500 }) {
+            // FILEWISE_SNAPSHOT_HEIGHT sets the height (e.g. 1440×900 for App Store screenshots).
+            if let window = NSApp.windows.first(where: { $0.isVisible && $0.frame.width > 500 }) {
                 var frame = window.frame
-                frame.size.width = width
+                if let width = env["FILEWISE_SNAPSHOT_WIDTH"].flatMap(Double.init) { frame.size.width = width }
+                if let height = env["FILEWISE_SNAPSHOT_HEIGHT"].flatMap(Double.init) {
+                    frame.origin.y += frame.size.height - height
+                    frame.size.height = height
+                }
                 window.setFrame(frame, display: true)
             }
             var steps = steps
@@ -49,7 +57,8 @@ enum SnapshotHook {
 
     private static func run(_ steps: [String], output: URL, appearance: String) async {
         for step in steps {
-            while library == nil || library?.scanning == true {
+            // Wait for the scan, and for the text in screenshots to be read.
+            while library == nil || library?.scanning == true || library?.textReading != nil {
                 try? await Task.sleep(for: .milliseconds(300))
             }
             guard let library else { return }
@@ -100,21 +109,57 @@ enum SnapshotHook {
                 continue
             }
             library.query = ""
+            library.selectedIDs = []
             library.category = parts.count > 1 ? parts[1] : "Home"
             library.query = parts.count > 2 ? parts[2] : ""
             try? await Task.sleep(for: .milliseconds(800))
-            if parts.count > 3, let first = library.visible.first ?? library.files.first {
-                switch parts[3] {
-                case "play": library.play(first)
-                case "scroll": scrollDown()
-                case "end": scrollDown(toEnd: true)
-                case "scroll2": scrollDown(); scrollDown()
-                default: library.selectedIDs = [first.id]
+            let actions = parts.count > 3 ? parts[3].split(separator: "+").map(String.init) : []
+            let showedInspector = navigation?.showInspector ?? true
+            if actions.contains("hide") { navigation?.showInspector = false }
+            if actions.contains("trash") {
+                await trashAndCapture(library, name: parts[0], output: output, appearance: appearance)
+                continue
+            }
+            if let first = library.visible.first ?? library.files.first {
+                for action in actions {
+                    switch action {
+                    case "play": library.play(first)
+                    case "scroll": scrollDown()
+                    case "end": scrollDown(toEnd: true)
+                    case "scroll2": scrollDown(); scrollDown()
+                    case "select": library.selectedIDs = [first.id]
+                    default: break
+                    }
                 }
             }
             try? await Task.sleep(for: .milliseconds(1200))
             capture(to: output.appendingPathComponent("\(parts[0])-\(appearance).png"))
+            navigation?.showInspector = showedInspector
         }
+    }
+
+    /// Moves the visible files to the macOS Trash the way a user would, closes
+    /// the progress sheet, captures Home with the Undo banner, and then Undoes,
+    /// so the (temporary) files are back and the Trash is left as it was.
+    private static func trashAndCapture(_ library: Library, name: String, output: URL, appearance: String) async {
+        let items = library.visible
+        guard !items.isEmpty else { return }
+        library.trashFiles(items: items)
+        while !library.trashIsCompleted && library.isTrashing {
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        library.isTrashing = false
+        library.trashIsCompleted = false
+        library.category = "Home"
+        try? await Task.sleep(for: .milliseconds(1800))
+        capture(to: output.appendingPathComponent("\(name)-\(appearance).png"))
+        library.undoLastTrash()
+        // undoLastTrash shows "Restoring files from Trash…" until the files are back.
+        while library.bannerMessage?.hasPrefix("Restoring") == true {
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        try? await Task.sleep(for: .milliseconds(800))
+        library.bannerMessage = nil
     }
 
     /// Writes what VoiceOver can reach in the app to <name>-<appearance>.txt.
