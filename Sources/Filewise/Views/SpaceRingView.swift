@@ -51,9 +51,16 @@ struct SpaceRingView: View {
     var body: some View {
         let slices = slices
         VStack(alignment: .leading, spacing: Theme.Spacing.l) {
-            HStack(alignment: .center, spacing: 28) {
-                ring(slices)
-                legend(slices).accessibilitySortPriority(1)
+            // The legend beside the ring when there's room, otherwise below it.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 28) {
+                    ring(slices)
+                    legend(slices).frame(minWidth: 240).accessibilitySortPriority(1)
+                }
+                VStack(alignment: .leading, spacing: Theme.Spacing.l) {
+                    ring(slices).frame(maxWidth: .infinity)
+                    legend(slices).accessibilitySortPriority(1)
+                }
             }
             .accessibilityElement(children: .contain)
             if let disk { diskBar(disk) }

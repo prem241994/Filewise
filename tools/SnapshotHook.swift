@@ -15,13 +15,20 @@ enum SnapshotHook {
         let env = ProcessInfo.processInfo.environment
         guard let output = env["FILEWISE_SNAPSHOT_DIR"], let folder = env["FILEWISE_SNAPSHOT_FOLDER"] else { return }
         let appearance = env["FILEWISE_SNAPSHOT_APPEARANCE"] ?? "light"
-        // Each step is name:category[:query][:select|play|scroll]; category "Paywall" captures the
+        // Each step is name:category[:query][:select|play|scroll|scroll2|end]; category "Paywall" captures the
         // unlock sheet, category "Settings" captures the
         // Settings window, and a first step with category "Welcome" captures the first-run page.
         let steps = (env["FILEWISE_SNAPSHOT_STEPS"] ?? "home:Home").split(separator: ",").map(String.init)
         Task {
             try? await Task.sleep(for: .seconds(1))
             NSApp.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
+            // FILEWISE_SNAPSHOT_WIDTH sets the window width, e.g. 860 to check the narrowest layout.
+            if let width = env["FILEWISE_SNAPSHOT_WIDTH"].flatMap(Double.init),
+               let window = NSApp.windows.first(where: { $0.isVisible && $0.frame.width > 500 }) {
+                var frame = window.frame
+                frame.size.width = width
+                window.setFrame(frame, display: true)
+            }
             var steps = steps
             if let first = steps.first, first.split(separator: ":").dropFirst().first == "Welcome" {
                 try? await Task.sleep(for: .milliseconds(1500))
@@ -100,6 +107,8 @@ enum SnapshotHook {
                 switch parts[3] {
                 case "play": library.play(first)
                 case "scroll": scrollDown()
+                case "end": scrollDown(toEnd: true)
+                case "scroll2": scrollDown(); scrollDown()
                 default: library.selectedIDs = [first.id]
                 }
             }
@@ -168,8 +177,9 @@ enum SnapshotHook {
         }
     }
 
-    /// Scrolls the largest scroll view (the page) down by most of its height.
-    private static func scrollDown() {
+    /// Scrolls the largest scroll view (the page) down by most of its height,
+    /// or to the bottom.
+    private static func scrollDown(toEnd: Bool = false) {
         func scrollViews(in view: NSView) -> [NSScrollView] {
             (view as? NSScrollView).map { [$0] } ?? [] + view.subviews.flatMap(scrollViews)
         }
@@ -177,7 +187,8 @@ enum SnapshotHook {
               let page = scrollViews(in: content).max(by: { $0.frame.height * $0.frame.width < $1.frame.height * $1.frame.width })
         else { return }
         let clip = page.contentView
-        clip.scroll(to: NSPoint(x: 0, y: clip.bounds.origin.y + clip.bounds.height * 0.75))
+        let bottom = (page.documentView?.frame.height ?? 0) - clip.bounds.height
+        clip.scroll(to: NSPoint(x: 0, y: toEnd ? max(0, bottom) : clip.bounds.origin.y + clip.bounds.height * 0.75))
         page.reflectScrolledClipView(clip)
     }
 

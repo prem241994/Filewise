@@ -41,7 +41,12 @@ struct HomeView: View {
                 if !library.scanning && library.scanNotice != nil {
                     ScanNoticeView(library: library)
                 }
-                SpaceRingView(library: library).entrance(appeared, order: 0)
+                // Like the Recent Files list below, wide sections report a small
+                // ideal width: otherwise the split view shrinks the sidebar to
+                // make room for them, clipping its labels.
+                SpaceRingView(library: library)
+                    .frame(minWidth: 0, idealWidth: 300, maxWidth: .infinity)
+                    .entrance(appeared, order: 0)
                 section("Library") {
                     LazyVGrid(columns: grid, spacing: Theme.Spacing.l) {
                         ForEach(Theme.libraryCategories, id: \.self, content: libraryCard)
@@ -61,6 +66,7 @@ struct HomeView: View {
                             cleanupGroup(.yourCall).frame(maxWidth: 260)
                         }
                     }
+                    .frame(minWidth: 0, idealWidth: 300, maxWidth: .infinity, alignment: .leading)
                 }
                 .entrance(appeared, order: 3)
                 downloadedFrom.entrance(appeared, order: 4)
@@ -143,8 +149,15 @@ struct HomeView: View {
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(confidence == .usuallySafe ? Color.green : Color.orange)
                 .accessibilityAddTraits(.isHeader)
-            HStack(spacing: Theme.Spacing.l) {
-                ForEach(Self.cleanupCategories(confidence), id: \.self) { cleanupCard($0).frame(minWidth: 130) }
+            // In a row when the cards fit, otherwise stacked, so a narrow window
+            // never has to widen the page (and squeeze the sidebar) for them.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Theme.Spacing.l) {
+                    ForEach(Self.cleanupCategories(confidence), id: \.self) { cleanupCard($0).frame(minWidth: 130) }
+                }
+                VStack(spacing: Theme.Spacing.m) {
+                    ForEach(Self.cleanupCategories(confidence), id: \.self) { cleanupCard($0) }
+                }
             }
         }
     }
@@ -224,16 +237,28 @@ struct HomeView: View {
         }
     }
 
-    private func recentRow(_ item: FileItem) -> some View {
-        let isSelected = library.selectedIDs.contains(item.id)
-        return HStack(spacing: Theme.Spacing.m) {
+    private func recentRowContent(_ item: FileItem, showsTags: Bool, showsSize: Bool) -> some View {
+        HStack(spacing: Theme.Spacing.m) {
+            // A small ideal width, so long names don't stop a layout from fitting.
             FileNameCell(item: item, location: library.displayLocation(for: item))
-            Spacer()
-            ReasonTags(reasons: item.cleanupReasons)
-            Text(item.displaySize).monospacedDigit().foregroundStyle(.secondary)
-                .frame(width: 80, alignment: .trailing)
+                .frame(minWidth: 140, idealWidth: 140, maxWidth: .infinity, alignment: .leading)
+            if showsTags { ReasonTags(reasons: item.cleanupReasons) }
+            if showsSize {
+                Text(item.displaySize).monospacedDigit().foregroundStyle(.secondary)
+                    .frame(width: 80, alignment: .trailing)
+            }
             Text(item.modified.formatted(date: .abbreviated, time: .omitted)).foregroundStyle(.secondary)
                 .frame(width: 100, alignment: .trailing)
+        }
+    }
+
+    private func recentRow(_ item: FileItem) -> some View {
+        let isSelected = library.selectedIDs.contains(item.id)
+        // Narrow pages drop the tags, then the size, so the name always has room.
+        return ViewThatFits(in: .horizontal) {
+            recentRowContent(item, showsTags: true, showsSize: true)
+            recentRowContent(item, showsTags: false, showsSize: true)
+            recentRowContent(item, showsTags: false, showsSize: false)
         }
         .padding(.horizontal, Theme.Spacing.m).padding(.vertical, Theme.Spacing.s)
         .background(isSelected ? Color.accentColor.opacity(0.18) : .clear)
